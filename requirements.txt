@@ -3,3 +3,4 @@ llama-index
 python-dotenv
 pydantic
 pytest
+flask

@@ -1,0 +1,10 @@
+.idea
+generated
+__pycache__
+
+# C extensions
+*.so
+.env
+
+tests
+.git

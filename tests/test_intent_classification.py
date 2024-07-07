@@ -19,7 +19,7 @@ class TestIntentClassification(unittest.TestCase):
         result = few_shot_intent_classification("When did India win football world cup last time?", test_intent_examples)
         self.assertIsNotNone(result)
         self.assertTrue(len(result.contextRequired) > 0)
-        self.assertTrue(result.context[0].startswith("web result"))
+        self.assertTrue(result.contextRequired[0].startswith("web result"))
 
     def test_few_shot_intent_classification_withWebAndScore(self):
         result = few_shot_intent_classification("Explain subject constitution and which topics in constitution should I focus.", test_intent_examples)
@@ -50,8 +50,6 @@ test_intent_examples = [
 ]
 
 expected_prompt_template = """
-**Contextualizer Prompt**
-
 You are a context expert, and your task is to identify the necessary context required to answer a user's query. 
 You will be provided with a query, please respond in the following format, replacing placeholders with actual content.
 

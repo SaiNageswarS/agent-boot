@@ -24,8 +24,6 @@ class IntentExample(BaseModel):
 
 
 system_prompt_template = """
-**Contextualizer Prompt**
-
 You are a context expert, and your task is to identify the necessary context required to answer a user's query. 
 You will be provided with a query, please respond in the following format, replacing placeholders with actual content.
 
@@ -82,6 +80,11 @@ def __generate_prompt__(examples: list[IntentExample]) -> str:
 
 def __extract_intent_result__(text: str) -> IntentResult:
     result_parts = text.split("|")
+
+    if len(result_parts) != 3:
+        raise ValueError("LLM response is malformed.")
+
     context_required = result_parts[1].split("[SEP]")
+    context_required = [x.strip() for x in context_required]
     result = IntentResult(query=result_parts[0], contextRequired=context_required, interpretation=result_parts[2])
     return result

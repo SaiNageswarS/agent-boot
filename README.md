@@ -1,6 +1,6 @@
 # agent-boot
 
-A comprehensive framework for creating customer-facing agents.
+A comprehensive framework for creating customer-facing agents. Based on cheaper llama 3 8b model. It operates on the principle of using LLM for language understanding only and leaves knowledge part to user. However, it helps user to identify right knowledge for personalized response using intent classification. 
 
 ## Features
 The framework includes following components:

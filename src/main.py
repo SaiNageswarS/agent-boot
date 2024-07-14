@@ -4,8 +4,8 @@ Flask interface file to call classifiers over http network.
 
 from flask import Flask, request, jsonify
 from pydantic import BaseModel, ValidationError
-from intent_classification import IntentExample, few_shot_intent_classification
-from personalized_response import personalized_response_generator
+from src.intent_classification import IntentExample, few_shot_intent_classification
+from src.personalized_response import personalized_response_generator
 
 app = Flask(__name__)
 

@@ -1,5 +1,7 @@
 llama-index-llms-groq
 llama-index
+pinecone-client
+openai
 python-dotenv
 pydantic
 pytest

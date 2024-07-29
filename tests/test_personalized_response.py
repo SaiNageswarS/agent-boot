@@ -7,17 +7,26 @@ load_dotenv()
 
 class TestPersonalizedResponse(unittest.TestCase):
     def test_personalized_response_withScore(self):
-        user_profile_json = '''{ "name": "Sai Nageswar S", "gender": "male", "age": 36 }'''
-        other_context = '''
-        - User Test Scores: {score}
-        - Web Results: A constitution is a system of fundamental principles or established precedents according to which a state or other organization is governed. These principles define the structure and functioning of the government, delineate the powers and duties of various governmental institutions, and establish the rights and duties of citizens.
-        '''
+        context = {
+            "User Profile": '''{ "name": "Sai Nageswar S", "gender": "male", "age": 36 }''',
+            "User Test Scores": sample_score,
+        }
 
-        other_context = other_context.format(score=sample_score)
         result = personalized_response_generator(
             query="Explain subject constitution and which topics in constitution should I focus.",
-            user_profile_json=user_profile_json,
-            other_context=other_context
+            context=context,
+            kb_query="Indian constitution and articles"
+        )
+        self.assertIsNotNone(result)
+
+    def test_personalized_response_knowledgeQuery(self):
+        context = {}
+
+        result = personalized_response_generator(
+            query="What is the procedure to amend constitution",
+            context=context,
+            kb_query="constitution amendment procedure",
+            threshold=0.50
         )
         self.assertIsNotNone(result)
 

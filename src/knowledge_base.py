@@ -20,6 +20,7 @@ def index_query(qid: str, query: str, metadata: dict[str, str], skip_similar=Tru
     if skip_similar:
         similar = __get_nearest_neighbors_by_embedding__(embedding, threshold, 3)
         if len(similar) > 0:
+            print(f"Similar items found existing {similar}")
             return False
 
     index.upsert(
@@ -31,6 +32,7 @@ def index_query(qid: str, query: str, metadata: dict[str, str], skip_similar=Tru
             }
         ]
     )
+    print("Indexed successfully")
 
     return True
 

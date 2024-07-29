@@ -3,8 +3,11 @@ Uses llama 8b model to give a personalized response to user query.
 Personalization will be based on context. Use **few_shot_intent_classification** to derive required context.
 """
 
+import json
 from llama_index.llms.groq import Groq
 from llama_index.core.llms import ChatMessage
+
+from src.knowledge_base import get_nearest_neighbors
 
 system_prompt_template = """
 You are a helpful assistant and your task is to answer user query based on below context. Consider the user's 
@@ -23,15 +26,22 @@ user_query_template = """
 Query: {query}
 
 **Context**
-- User Profile: {userProfile}
-{otherContext}
+{context}
 """
 
 
-def personalized_response_generator(query: str, user_profile_json: str, other_context: str) -> str:
+def personalized_response_generator(query: str, context: dict[str, str], kb_query: str, threshold=0.75) -> str:
     llm = Groq(model="llama3-8b-8192")
     system_prompt = system_prompt_template
-    user_query_prompt = user_query_template.format(query=query, userProfile=user_profile_json, otherContext=other_context)
+
+    if __is_not_empty_or_null__(kb_query):
+        kb_results = get_nearest_neighbors(query=kb_query, threshold=threshold)
+        if len(kb_results) > 0:
+            context["knowledge"] = json.dumps(kb_results)
+
+    context_str = __get_context_from_dict__(context)
+
+    user_query_prompt = user_query_template.format(query=query, context=context_str)
 
     messages = [
         ChatMessage(role="system", content=system_prompt),
@@ -41,3 +51,15 @@ def personalized_response_generator(query: str, user_profile_json: str, other_co
     resp = llm.chat(messages)
     result = resp.message.content
     return result
+
+
+def __get_context_from_dict__(context: dict[str, str]) -> str:
+    result = ""
+
+    for key, value in context.items():
+        result += f"- {key}: {value}\n"
+
+    return result
+
+def __is_not_empty_or_null__(s: str) -> bool:
+    return bool(s and s.strip())

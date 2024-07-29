@@ -3,7 +3,8 @@ Flask interface file to call classifiers over http network.
 """
 
 from flask import Flask, request, jsonify
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, field_validator, ValidationError
+import json
 from src.intent_classification import IntentExample, few_shot_intent_classification
 from src.personalized_response import personalized_response_generator
 from src.knowledge_base import index_query
@@ -37,9 +38,10 @@ def personalized_response():
         # Validate incoming data using Pydantic
         validated_data = PersonalizationRequest(**data)
         result = personalized_response_generator(
-            validated_data.query,
-            validated_data.user_profile_json,
-            validated_data.other_context)
+            query=validated_data.query,
+            context=validated_data.context,
+            kb_query=validated_data.kb_query,
+            threshold=validated_data.threshold)
 
         return jsonify({'response': result}), 200
     except ValidationError as e:
@@ -72,14 +74,27 @@ class IntentRequest(BaseModel):
 
 class PersonalizationRequest(BaseModel):
     query: str
-    user_profile_json: str
-    other_context: str
+    context: dict[str, str]
+    kb_query: str
+    threshold: float
+
+    @field_validator('context', mode='before')
+    def parse_metadata(cls, value):
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
 
 
 class IndexQueryRequest(BaseModel):
     qid: str
     query: str
     metadata: dict[str, str]
+
+    @field_validator('metadata', mode='before')
+    def parse_metadata(cls, value):
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
 
 
 if __name__ == '__main__':

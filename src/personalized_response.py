@@ -7,7 +7,7 @@ import json
 from llama_index.llms.groq import Groq
 from llama_index.core.llms import ChatMessage
 
-from src.knowledge_base import get_nearest_neighbors
+from src.knowledge_base import KnowledgeBase
 
 system_prompt_template = """
 You are a helpful assistant and your task is to answer user query based on below context. Consider the user's 
@@ -31,11 +31,14 @@ Query: {query}
 
 
 def personalized_response_generator(query: str, context: dict[str, str], kb_query: str, threshold=0.75) -> str:
+    print(f"Generating personalized response for {query}")
     llm = Groq(model="llama3-8b-8192")
     system_prompt = system_prompt_template
 
     if __is_not_empty_or_null__(kb_query):
-        kb_results = get_nearest_neighbors(query=kb_query, threshold=threshold)
+        print(f"Querying KB for {kb_query}")
+        kb = KnowledgeBase()
+        kb_results = kb.get_nearest_neighbors(query=kb_query, threshold=threshold)
         if len(kb_results) > 0:
             context["knowledge"] = json.dumps(kb_results)
 
@@ -60,6 +63,7 @@ def __get_context_from_dict__(context: dict[str, str]) -> str:
         result += f"- {key}: {value}\n"
 
     return result
+
 
 def __is_not_empty_or_null__(s: str) -> bool:
     return bool(s and s.strip())

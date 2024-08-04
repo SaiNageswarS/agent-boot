@@ -8,7 +8,7 @@ load_dotenv()
 class TestIntentClassification(unittest.TestCase):
     def test_generate_prompt(self):
         generated_prompt = __generate_prompt__(test_intent_examples)
-        self.assertEquals(expected_prompt_template, generated_prompt)
+        self.assertEqual(expected_prompt_template, generated_prompt)
 
     def test_few_shot_intent_classification_withScore(self):
         result = few_shot_intent_classification("How should I set by preparation schedule?", test_intent_examples)

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator, ValidationError
 import json
 from src.intent_classification import IntentExample, few_shot_intent_classification
 from src.personalized_response import personalized_response_generator
-from src.knowledge_base import index_query
+from src.knowledge_base import KnowledgeBase
 
 app = Flask(__name__)
 
@@ -57,7 +57,8 @@ def add_query():
 
         # Validate incoming data using Pydantic
         validated_data = IndexQueryRequest(**data)
-        result = index_query(
+        kb = KnowledgeBase()
+        result = kb.index_query(
             qid=validated_data.qid,
             query=validated_data.query,
             metadata=validated_data.metadata)

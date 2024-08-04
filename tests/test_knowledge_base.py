@@ -12,14 +12,14 @@ class TestKnowledgeBase(unittest.TestCase):
 
         result = get_nearest_neighbors("foundational text for classical Indian dance")
         # only one similar query should be fetched.
-        self.assertEquals(1, len(result))
-        self.assertEquals("35f3984ee34a33753d328786b2e3e980", result[0]["qhash"])
+        self.assertEqual(1, len(result))
+        self.assertEqual("35f3984ee34a33753d328786b2e3e980", result[0]["qhash"])
         delete_query([x["qhash"] for x in sample_data])
 
     def test_insert_similar_query(self):
         for record in sample_data:
             is_indexed = index_query(record["qhash"], record["question"], record)
-            self.assertEquals(True, is_indexed)
+            self.assertEqual(True, is_indexed)
 
         similar_data = {
             "explanation": "Bharat Natyam is classical dance in state of Tamil Nadu.",
@@ -31,7 +31,7 @@ class TestKnowledgeBase(unittest.TestCase):
         }
 
         is_indexed = index_query(similar_data["qhash"], similar_data["question"], similar_data)
-        self.assertEquals(True, is_indexed)
+        self.assertEqual(True, is_indexed)
 
         similar_data2 = {
             "explanation": "The Natya Shastra, attributed to the sage Bharata Muni, is an ancient Indian treatise that deals with the performing arts, including theatre, dance, and music. It is considered the foundational text for classical Indian dance and drama, laying down the principles and techniques for performance and production.",
@@ -43,7 +43,7 @@ class TestKnowledgeBase(unittest.TestCase):
         }
 
         is_indexed = index_query(similar_data2["qhash"], similar_data2["question"], similar_data2)
-        self.assertEquals(False, is_indexed)
+        self.assertEqual(False, is_indexed)
 
         delete_query([x["qhash"] for x in sample_data])
         delete_query(["sim_q1", "sim_q2"])

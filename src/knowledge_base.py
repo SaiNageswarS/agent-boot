@@ -75,10 +75,11 @@ def delete_query(qids: list[str]):
 
 def __get_index__():
     pinecone_key = os.getenv("PINECONE_KEY")
+    index_name = os.getenv("INDEX_NAME")
     pc = Pinecone(api_key=pinecone_key)
 
     # agent-boot users have to create "agent_boot_kb" vector index in pinecone.
-    index = pc.Index("agent-boot-kb")
+    index = pc.Index(index_name)
 
     return index
 

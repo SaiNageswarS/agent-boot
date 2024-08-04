@@ -31,10 +31,12 @@ Query: {query}
 
 
 def personalized_response_generator(query: str, context: dict[str, str], kb_query: str, threshold=0.75) -> str:
+    print(f"Generating personalized response for {query}")
     llm = Groq(model="llama3-8b-8192")
     system_prompt = system_prompt_template
 
     if __is_not_empty_or_null__(kb_query):
+        print(f"Querying KB for {kb_query}")
         kb_results = get_nearest_neighbors(query=kb_query, threshold=threshold)
         if len(kb_results) > 0:
             context["knowledge"] = json.dumps(kb_results)

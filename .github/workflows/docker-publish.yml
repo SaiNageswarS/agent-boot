@@ -6,10 +6,6 @@ on:
       - master
 
 env:
-  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-  PINECONE_KEY: ${{ secrets.PINECONE_KEY }}
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-  INDEX_NAME: ${{ secrets.INDEX_NAME }}
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -30,6 +26,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-cov
+
+    - name: Set environment variables
+      run: |
+        echo "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" >> $GITHUB_ENV
+        echo "PINECONE_KEY=${{ secrets.PINECONE_KEY }}" >> $GITHUB_ENV
+        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
+        echo "INDEX_NAME=${{ secrets.INDEX_NAME }}" >> $GITHUB_ENV
 
     - name: Run tests with coverage
       run: |

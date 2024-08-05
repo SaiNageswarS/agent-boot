@@ -1,3 +1,4 @@
+import os
 import unittest
 from src.knowledge_base import index_query, get_nearest_neighbors, delete_query
 from dotenv import load_dotenv
@@ -7,6 +8,7 @@ load_dotenv()
 
 class TestKnowledgeBase(unittest.TestCase):
     def test_insert_query_delete(self):
+        print(f'Using {os.getenv("INDEX_NAME")} Index.')
         for record in sample_data:
             index_query(record["qhash"], record["question"], record)
 
@@ -17,6 +19,7 @@ class TestKnowledgeBase(unittest.TestCase):
         delete_query([x["qhash"] for x in sample_data])
 
     def test_insert_similar_query(self):
+        print(f'Using {os.getenv("INDEX_NAME")} Index.')
         for record in sample_data:
             is_indexed = index_query(record["qhash"], record["question"], record)
             self.assertEqual(True, is_indexed)

@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify
 from pydantic import BaseModel, Field, field_validator, ValidationError
 import json
 from src.intent_classification import IntentExample, few_shot_intent_classification
-from src.personalized_response import personalized_response_generator
+from src.personalized_response_generator import PersonalizedResponseGenerator
 from src.knowledge_base import KnowledgeBase
 
 app = Flask(__name__)
@@ -37,7 +37,7 @@ def personalized_response():
 
         # Validate incoming data using Pydantic
         validated_data = PersonalizationRequest(**data)
-        result = personalized_response_generator(
+        result = PersonalizedResponseGenerator().generate(
             query=validated_data.query,
             context=validated_data.context,
             kb_query=validated_data.kb_query,

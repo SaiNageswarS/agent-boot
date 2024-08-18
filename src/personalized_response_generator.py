@@ -30,30 +30,33 @@ Query: {query}
 """
 
 
-def personalized_response_generator(query: str, context: dict[str, str], kb_query: str, threshold=0.75) -> str:
-    print(f"Generating personalized response for {query}")
-    llm = Groq(model="llama3-8b-8192")
-    system_prompt = system_prompt_template
+class PersonalizedResponseGenerator:
+    def __init__(self, kb: KnowledgeBase = None):
+        self.kb = kb or KnowledgeBase()
 
-    if __is_not_empty_or_null__(kb_query):
-        print(f"Querying KB for {kb_query}")
-        kb = KnowledgeBase()
-        kb_results = kb.get_nearest_neighbors(query=kb_query, threshold=threshold)
-        if len(kb_results) > 0:
-            context["knowledge"] = json.dumps(kb_results)
+    def generate(self, query: str, context: dict[str, str], kb_query: str, threshold=0.75) -> str:
+        print(f"Generating personalized response for {query}")
+        llm = Groq(model="llama3-8b-8192")
+        system_prompt = system_prompt_template
 
-    context_str = __get_context_from_dict__(context)
+        if __is_not_empty_or_null__(kb_query):
+            print(f"Querying KB for {kb_query}")
+            kb_results = self.kb.get_nearest_neighbors(query=kb_query, threshold=threshold)
+            if len(kb_results) > 0:
+                context["knowledge"] = json.dumps(kb_results)
 
-    user_query_prompt = user_query_template.format(query=query, context=context_str)
+        context_str = __get_context_from_dict__(context)
 
-    messages = [
-        ChatMessage(role="system", content=system_prompt),
-        ChatMessage(role="user", content=user_query_prompt),
-    ]
+        user_query_prompt = user_query_template.format(query=query, context=context_str)
 
-    resp = llm.chat(messages)
-    result = resp.message.content
-    return result
+        messages = [
+            ChatMessage(role="system", content=system_prompt),
+            ChatMessage(role="user", content=user_query_prompt),
+        ]
+
+        resp = llm.chat(messages)
+        result = resp.message.content
+        return result
 
 
 def __get_context_from_dict__(context: dict[str, str]) -> str:

@@ -30,9 +30,6 @@ jobs:
     - name: Set environment variables
       run: |
         echo "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" >> $GITHUB_ENV
-        echo "PINECONE_KEY=${{ secrets.PINECONE_KEY }}" >> $GITHUB_ENV
-        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
-        echo "INDEX_NAME=${{ secrets.INDEX_NAME }}" >> $GITHUB_ENV
         echo "NLTK_DATA=$(pwd)/wordnet" >> $GITHUB_ENV
 
     - name: Run tests with coverage

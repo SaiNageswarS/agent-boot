@@ -5,6 +5,9 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Set NLTK_DATA environment variable
+ENV NLTK_DATA=/app/wordnet
+
 # Create and set the working directory
 WORKDIR /app
 

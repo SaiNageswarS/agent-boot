@@ -5,7 +5,6 @@ Uses few shot learning and chain-of-thought prompting.
 Provides few examples (few shot) for model to understand output for input.
 Uses chain of thought by providing interpretation as reasoning for model output.
 """
-
 from pydantic import BaseModel
 from llama_index.llms.groq import Groq
 from llama_index.core.llms import ChatMessage

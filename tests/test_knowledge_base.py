@@ -1,7 +1,8 @@
 import os
 import unittest
 from src.knowledge_base import KnowledgeBase
-from src.clients.embedding import EmbeddingInterface, OpenAIEmbedding, MiniLmEmbedding
+from src.clients.embedding import EmbeddingInterface, OpenAIEmbedding
+from tests.mock_embedding import MiniLmEmbedding
 from src.clients.vectordb import VectorDbInterface, PineconeDb
 from tests.mock_vector_db import MockVectorDb
 from dotenv import load_dotenv

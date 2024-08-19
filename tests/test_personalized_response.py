@@ -2,7 +2,8 @@ import os
 import unittest
 from dotenv import load_dotenv
 from src.personalized_response_generator import PersonalizedResponseGenerator
-from src.clients.embedding import EmbeddingInterface, OpenAIEmbedding, MiniLmEmbedding
+from src.clients.embedding import EmbeddingInterface, OpenAIEmbedding
+from tests.mock_embedding import MiniLmEmbedding
 from src.clients.vectordb import VectorDbInterface, PineconeDb
 from src.knowledge_base import KnowledgeBase
 from tests.mock_vector_db import MockVectorDb

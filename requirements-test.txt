@@ -2,6 +2,8 @@ llama-index-llms-groq
 llama-index
 pinecone-client
 openai
+sentence-transformers
+numpy
 python-dotenv
 pydantic
 flask

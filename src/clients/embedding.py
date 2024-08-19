@@ -1,13 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import List
 import os
 from openai import OpenAI
-from sentence_transformers import SentenceTransformer
 
 
 class EmbeddingInterface(ABC):
     @abstractmethod
-    def get_embedding(self, text: str) -> List[float]:
+    def get_embedding(self, text: str) -> list[float]:
         """
         Generate an embedding for the given text.
 
@@ -25,19 +23,10 @@ class OpenAIEmbedding(EmbeddingInterface):
 
         self.client = OpenAI(api_key=api_key)
 
-    def get_embedding(self, query: str) -> List[float]:
+    def get_embedding(self, query: str) -> list[float]:
         query = query.replace("\n", " ")
         embedding = self.client.embeddings.create(
             input=[query],
             model="text-embedding-3-small").data[0].embedding
 
-        return embedding
-
-
-class MiniLmEmbedding(EmbeddingInterface):
-    def __init__(self):
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
-
-    def get_embedding(self, text: str) -> List[float]:
-        embedding = self.model.encode(text).tolist()
         return embedding

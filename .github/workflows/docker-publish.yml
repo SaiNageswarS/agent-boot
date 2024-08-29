@@ -6,7 +6,7 @@ on:
       - master
 
 env:
-  IMAGE_TAG: ${{ github.sha }}
+  IMAGE_TAG: latest
 
 jobs:
   test:

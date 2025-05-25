@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package login;
+
+option go_package = "github.com/SaiNageswarS/agent-boot/generated/pb";
+
+service Login {
+    rpc Login(LoginRequest) returns (AuthResponse) {}
+    rpc LoginWithGoogle(GoogleLoginRequest) returns (AuthResponse) {}
+    rpc AdminLoginWithGoogle(GoogleLoginRequest) returns (AuthResponse) {}
+    rpc SignUp(SignUpRequest) returns (AuthResponse) {}
+}
+
+message LoginRequest {
+    string email = 1;
+    string password = 2;
+    string tenant = 3;
+}
+
+message AuthResponse {
+    string jwt = 1;
+    string userType = 2;
+}
+
+message SignUpRequest {
+    string email = 1;
+    string password = 2;
+    string tenant = 3;
+}
+
+message GoogleLoginRequest {
+    string id_token = 1;
+}

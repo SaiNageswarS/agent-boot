@@ -1,27 +1,17 @@
-# Use the official Python image from the Docker Hub
-FROM python:3.11-slim
+FROM ubuntu:latest
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# Essential for using tls
+RUN apt-get update
+RUN apt-get install ca-certificates -y
+RUN update-ca-certificates
 
-# Set NLTK_DATA environment variable
-ENV NLTK_DATA=/app/wordnet
+# web port
+EXPOSE 8081
+# grpc port
+EXPOSE 50051
 
-# Create and set the working directory
-WORKDIR /app
+ADD build/agent-boot /app/agent-boot
+ADD config.ini /app/config.ini
+RUN ls -l
 
-# Copy the requirements file into the container
-COPY requirements.txt /app/
-
-# Install the dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the application code
-COPY . /app/
-
-# Expose the port the app runs on
-EXPOSE 5000
-
-# Run the application
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "src.main:app"]
+CMD /app/agent-boot

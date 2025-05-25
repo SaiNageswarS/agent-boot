@@ -1,0 +1,193 @@
+syntax = "proto3";
+
+package mcp.v1;
+
+option go_package = "github.com/SaiNageswarS/agent-boot/generated/mcp/v1;mcpv1";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/struct.proto";
+
+// MCP Service Definition
+service MCPService {
+  // Initialize the MCP connection
+  rpc Initialize(InitializeRequest) returns (InitializeResponse);
+  
+  // Resource operations
+  rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse);
+  rpc ReadResource(ReadResourceRequest) returns (ReadResourceResponse);
+  rpc ListResourceTemplates(ListResourceTemplatesRequest) returns (ListResourceTemplatesResponse);
+  
+  // Tool operations  
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+  rpc CallTool(CallToolRequest) returns (CallToolResponse);
+  
+  // Prompt operations
+  rpc ListPrompts(ListPromptsRequest) returns (ListPromptsResponse);
+  rpc GetPrompt(GetPromptRequest) returns (GetPromptResponse);
+  
+  // WebSocket-like streaming for real-time updates
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
+}
+
+// Initialize
+message InitializeRequest {
+  string protocol_version = 1;
+  ClientInfo client_info = 2;
+}
+
+message InitializeResponse {
+  string protocol_version = 1;
+  ServerInfo server_info = 2;
+  ServerCapabilities capabilities = 3;
+}
+
+message ClientInfo {
+  string name = 1;
+  string version = 2;
+}
+
+message ServerInfo {
+  string name = 1;
+  string version = 2;
+}
+
+message ServerCapabilities {
+  ResourceCapabilities resources = 1;
+  ToolCapabilities tools = 2;
+  PromptCapabilities prompts = 3;
+}
+
+message ResourceCapabilities {
+  bool subscribe = 1;
+  bool list_changed = 2;
+}
+
+message ToolCapabilities {
+  // Future capabilities
+}
+
+message PromptCapabilities {
+  // Future capabilities  
+}
+
+// Resources
+message ListResourcesRequest {}
+
+message ListResourcesResponse {
+  repeated Resource resources = 1;
+}
+
+message ReadResourceRequest {
+  string uri = 1;
+}
+
+message ReadResourceResponse {
+  repeated ResourceContent contents = 1;
+  ResourceMeta meta = 2;
+}
+
+message Resource {
+  string uri = 1;
+  string name = 2;
+  string description = 3;
+  string mime_type = 4;
+  map<string, string> annotations = 5;
+}
+
+message ResourceContent {
+  string type = 1;
+  string text = 2;
+  bytes data = 3;
+  string mime_type = 4;
+}
+
+message ResourceMeta {
+  string title = 1;
+  string description = 2;
+  string author = 3;
+  string created = 4;
+  string modified = 5;
+}
+
+// Resource Templates
+message ListResourceTemplatesRequest {}
+
+message ListResourceTemplatesResponse {
+  repeated ResourceTemplate resource_templates = 1;
+}
+
+message ResourceTemplate {
+  string uri_template = 1;
+  string name = 2;
+  string description = 3;
+  string mime_type = 4;
+  map<string, string> annotations = 5;
+}
+
+// Tools
+message ListToolsRequest {}
+
+message ListToolsResponse {
+  repeated Tool tools = 1;
+}
+
+message CallToolRequest {
+  string name = 1;
+  google.protobuf.Struct arguments = 2;
+}
+
+message CallToolResponse {
+  google.protobuf.Any result = 1;
+  bool is_error = 2;
+  string error_message = 3;
+}
+
+message Tool {
+  string name = 1;
+  string description = 2;
+  google.protobuf.Struct input_schema = 3;
+}
+
+// Prompts
+message ListPromptsRequest {}
+
+message ListPromptsResponse {
+  repeated Prompt prompts = 1;
+}
+
+message GetPromptRequest {
+  string name = 1;
+  google.protobuf.Struct arguments = 2;
+}
+
+message GetPromptResponse {
+  repeated PromptMessage messages = 1;
+}
+
+message Prompt {
+  string name = 1;
+  string description = 2;
+  repeated PromptArgument arguments = 3;
+}
+
+message PromptArgument {
+  string name = 1;
+  string description = 2;
+  bool required = 3;
+}
+
+message PromptMessage {
+  string role = 1;
+  string content = 2;
+}
+
+// Streaming
+message SubscribeRequest {
+  repeated string resource_uris = 1;
+}
+
+message SubscribeResponse {
+  string type = 1; // "resource_updated", "resource_deleted", etc.
+  string uri = 2;
+  ResourceContent content = 3;
+}

@@ -5,6 +5,9 @@ RUN apt-get update
 RUN apt-get install ca-certificates -y
 RUN update-ca-certificates
 
+# Install mupdf
+RUN apt-get install -y mupdf mupdf-tools
+
 # web port
 EXPOSE 8081
 # grpc port

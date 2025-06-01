@@ -13,7 +13,7 @@ func IndexPdfFileWorkflow(ctx workflow.Context, input IndexerWorkflowInput) (str
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
 	var chunksJsonPath string
-	err := workflow.ExecuteActivity(ctx, (*IndexerActivities).ChunkPDF, input.PdfUrl).Get(ctx, &chunksJsonPath)
+	err := workflow.ExecuteActivity(ctx, (*IndexerActivities).ChunkPDF, input.Tenant, input.PdfUrl).Get(ctx, &chunksJsonPath)
 	if err != nil {
 		return "", err
 	}

@@ -1,14 +1,14 @@
 package workers
 
 type Chunk struct {
-	ID        string      `json:"id"`
-	Text      string      `json:"text"`
-	Page      int         `json:"page"`
-	Vectors   [][]float32 // [general, medical, objective]
-	Summary   string      `json:"summary"`
-	SourcePDF string      `json:"sourcePdf"`
+	Header    string `json:"header"`
+	Page      int    `json:"page"`
+	Objective string `json:"objective"`
+	Passage   string `json:"passage"`
+	SourcePdf string `json:"sourcePdf"` // URL or path to the source PDF file
 }
 
 type IndexerWorkflowInput struct {
 	PdfUrl string `json:"pdfUrl"`
+	Tenant string `json:"tenant"` // Tenant ID or name
 }

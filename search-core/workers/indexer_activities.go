@@ -8,6 +8,7 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 )
 
 type IndexerActivities struct {
@@ -16,7 +17,7 @@ type IndexerActivities struct {
 	chunker *Chunker
 }
 
-func ProvideIndexerActivities(ccfg *appconfig.AppConfig, cloud cloud.Cloud) *IndexerActivities {
+func ProvideIndexerActivities(ccfg *appconfig.AppConfig, cloud cloud.Cloud, llmClient *llm.AnthropicClient) *IndexerActivities {
 	return &IndexerActivities{
 		ccfg:    ccfg,
 		cloud:   cloud,
@@ -24,9 +25,9 @@ func ProvideIndexerActivities(ccfg *appconfig.AppConfig, cloud cloud.Cloud) *Ind
 	}
 }
 
-func (s *IndexerActivities) ChunkPDF(ctx context.Context, pdfUrl string) (string, error) {
+func (s *IndexerActivities) ChunkPDF(ctx context.Context, tenant, pdfUrl string) (string, error) {
 	// Download the PDF file to a temporary location
-	pdfPath, err := s.cloud.DownloadFile(ctx, s.ccfg.SearchIndexBucket, pdfUrl)
+	pdfPath, err := s.cloud.DownloadFile(ctx, s.ccfg.SearchIndexBucket, tenant+"/"+pdfUrl)
 	if err != nil {
 		return "", errors.New("failed to download PDF file: " + err.Error())
 	}
@@ -37,14 +38,18 @@ func (s *IndexerActivities) ChunkPDF(ctx context.Context, pdfUrl string) (string
 		return "", errors.New("failed to chunk PDF file: " + err.Error())
 	}
 
-	// Upload the chunks JSON to the cloud
-	jsonOut, err := json.MarshalIndent(chunks, "", "  ")
+	for _, chunk := range chunks {
+		chunk.SourcePdf = pdfUrl
+	}
+
+	// Convert chunks to JSON
+	chunksJson, err := json.Marshal(chunks)
 	if err != nil {
-		return "", errors.New("failed to marshal chunks JSON: " + err.Error())
+		return "", errors.New("failed to marshal chunks to JSON: " + err.Error())
 	}
 
 	chunksJsonFileName := filepath.Base(pdfPath) + ".chunks.json"
-	chunksUrl, err := s.cloud.UploadStream(ctx, s.ccfg.SearchIndexBucket, chunksJsonFileName, jsonOut)
+	chunksUrl, err := s.cloud.UploadStream(ctx, s.ccfg.SearchIndexBucket, tenant+"/"+chunksJsonFileName, []byte(chunksJson))
 	if err != nil {
 		return "", errors.New("failed to upload chunks JSON: " + err.Error())
 	}

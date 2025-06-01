@@ -14,13 +14,13 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/config"
 	"github.com/SaiNageswarS/go-api-boot/dotenv"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-api-boot/server"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	temporalClient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 	"go.uber.org/zap"
 )
 
@@ -35,8 +35,8 @@ func main() {
 		logger.Fatal("Failed to load config", zap.Error(err))
 	}
 
-	cloud := &cloud.Azure{}
-	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(ccfgg.MongoUri))
+	cloudFns := cloud.ProvideAzure(&ccfgg.BootConfig)
+	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(ccfgg.MongoURI))
 	if err != nil {
 		logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
 	}
@@ -46,19 +46,18 @@ func main() {
 		HTTPPort(":8080").
 		Provide(ccfgg).
 		ProvideAs(mongoClient, (*odm.MongoClient)(nil)).
+		ProvideAs(cloudFns, (*cloud.Cloud)(nil)).
+		ProvideFunc(llm.ProvideAnthropicClient).
+
 		// Add Workers
 		WithTemporal("search-core", &temporalClient.Options{
 			HostPort: ccfgg.TemporalHostPort,
 		}).
-		RegisterTemporalWorker(func(c temporalClient.Client, w worker.Worker) {
-			// Register the workflow
-			w.RegisterWorkflow(workers.IndexPdfFileWorkflow)
+		RegisterTemporalActivity(workers.ProvideIndexerActivities).
+		RegisterTemporalWorkflow(workers.IndexPdfFileWorkflow).
 
-			// Register the activities
-			w.RegisterActivity(workers.ProvideIndexerActivities(ccfgg, cloud))
-		}).
 		// Register gRPC service impls
-		Register(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
+		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
 		Build()
 
 	if err != nil {

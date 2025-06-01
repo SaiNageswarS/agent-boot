@@ -2,8 +2,6 @@ package workers
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 
 	"github.com/SaiNageswarS/gizmo/mupdf"
 	"github.com/SaiNageswarS/go-api-boot/logger"
@@ -12,8 +10,8 @@ import (
 )
 
 const (
-	maxTokens = 400
-	overlap   = 50
+	maxTokens = 1200
+	overlap   = 150
 )
 
 type Chunker struct {
@@ -27,33 +25,62 @@ func ProvideChunker() *Chunker {
 		logger.Error("Failed to get token encoder", zap.Error(err))
 		return nil
 	}
+
 	return &Chunker{tok: tok}
 }
 
 func (c *Chunker) ChunkPDF(ctx context.Context, pdfFilePath string) ([]Chunk, error) {
-	pdfText, err := mupdf.ExtractText(ctx, pdfFilePath)
+	blocks, err := mupdf.ExtractStructuredText(ctx, pdfFilePath)
 	if err != nil {
-		logger.Error("Failed to extract text", zap.String("filename", pdfFilePath), zap.Error(err))
+		logger.Error("Failed to extract structured text from PDF", zap.Error(err))
 		return nil, err
 	}
 
+	logger.Info("Extracted blocks from PDF", zap.Int("num_blocks", len(blocks)))
 	var out []Chunk
-	tokens := c.tok.Encode(pdfText, nil, nil)
-	for i := 0; i < len(tokens); i += maxTokens - overlap {
-		end := min(i+maxTokens, len(tokens))
-		sub := tokens[i:end]
-		txt := c.tok.Decode(sub)
-		id := sha1.Sum([]byte(pdfFilePath + ":" + txt))
-		out = append(out, Chunk{
-			ID:        hex.EncodeToString(id[:]),
-			Text:      txt,
-			Page:      -1, // TODO: Should we extract page by page and chunk by tokens?
-			SourcePDF: pdfFilePath,
-		})
-		if end == len(tokens) {
-			break
+
+	for _, block := range blocks {
+		if block.Text == "" {
+			continue // Skip empty blocks
 		}
+
+		// Tokenize the text to check if it exceeds max tokens
+		tokens := c.tok.Encode(block.Text, nil, nil)
+		if len(tokens) <= maxTokens {
+			chunk := Chunk{
+				Header:    block.HeaderHierarchy,
+				Passage:   block.Text,
+				Page:      block.PageNumber,
+				SourcePdf: pdfFilePath,
+			}
+			out = append(out, chunk)
+			continue
+		}
+
+		// If it exceeds max tokens, split the text into smaller chunks
+		splitChunks := c.splitTextIntoChunks(block.Text, block.HeaderHierarchy, block.PageNumber, pdfFilePath)
+		out = append(out, splitChunks...)
 	}
 
 	return out, nil
+}
+
+func (c *Chunker) splitTextIntoChunks(text, header string, page int, sourcePdf string) []Chunk {
+	tokens := c.tok.Encode(text, nil, nil)
+	chunks := make([]Chunk, 0)
+
+	for i := 0; i < len(tokens); i += maxTokens - overlap {
+		end := min(i+maxTokens, len(tokens))
+
+		chunkText := c.tok.Decode(tokens[i:end])
+		chunk := Chunk{
+			Header:    header,
+			Page:      page,
+			Passage:   chunkText,
+			SourcePdf: sourcePdf,
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	return chunks
 }

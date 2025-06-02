@@ -9,7 +9,8 @@ type Chunk struct {
 	SourcePDF string      `json:"sourcePdf"`
 }
 
-type IndexerWorkflowInput struct {
-	PdfFile string `json:"pdfFile"`
-	Tenant  string `json:"tenant"`
+type IndexerWorkflowState struct {
+	PdfFile  string `json:"pdfFile"`
+	Tenant   string `json:"tenant"`
+	Markdown string `json:"markdown"` // For future use, if needed
 }

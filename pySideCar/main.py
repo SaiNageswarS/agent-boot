@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 async def main():
     load_dotenv()
-    run_mode = os.getenv("RUN_MODE", "dev").lower()
+    run_mode = os.getenv("ENV", "dev").lower()
 
     config = configparser.ConfigParser()
     config.read('config.ini')

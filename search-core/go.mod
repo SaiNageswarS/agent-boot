@@ -4,7 +4,7 @@ go 1.23.9
 
 require (
 	github.com/SaiNageswarS/gizmo v0.0.4
-	github.com/SaiNageswarS/go-api-boot v1.0.11
+	github.com/SaiNageswarS/go-api-boot v1.0.12
 	github.com/pkoukk/tiktoken-go v0.1.7
 	go.mongodb.org/mongo-driver v1.15.1
 	go.temporal.io/sdk v1.34.0
@@ -29,7 +29,6 @@ require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.4.2 // indirect
 	github.com/aws/aws-sdk-go v1.34.28 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/caarlos0/env/v11 v11.3.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect

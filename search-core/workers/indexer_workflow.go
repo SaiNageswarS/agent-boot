@@ -13,7 +13,9 @@ func IndexFileWorkflow(ctx workflow.Context, input IndexerWorkflowInput) (string
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
 	var chunksJsonPath string
-	err := workflow.ExecuteActivity(ctx, (*IndexerActivities).ChunkPDF, input.Tenant, input.PdfFile).Get(ctx, &chunksJsonPath)
+
+	// running in pySideCar
+	err := workflow.ExecuteActivity(ctx, "convert_pdf_to_md", input.Tenant, input.PdfFile).Get(ctx, &chunksJsonPath)
 	if err != nil {
 		return "", err
 	}

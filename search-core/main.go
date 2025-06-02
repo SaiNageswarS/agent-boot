@@ -34,7 +34,7 @@ func main() {
 		logger.Fatal("Failed to load config", zap.Error(err))
 	}
 
-	cloud := cloud.ProvideAzure(&ccfgg.BootConfig)
+	az := cloud.ProvideAzure(&ccfgg.BootConfig)
 	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(ccfgg.MongoURI))
 	if err != nil {
 		logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
@@ -44,7 +44,7 @@ func main() {
 		GRPCPort(":50051"). // or ":0" for dynamic
 		HTTPPort(":8080").
 		Provide(ccfgg).
-		Provide(cloud).
+		ProvideAs(az, (*cloud.Cloud)(nil)).
 		ProvideAs(mongoClient, (*odm.MongoClient)(nil)).
 		// Add Workers
 		WithTemporal("search-core", &temporalClient.Options{

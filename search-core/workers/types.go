@@ -10,5 +10,6 @@ type Chunk struct {
 }
 
 type IndexerWorkflowInput struct {
-	PdfUrl string `json:"pdfUrl"`
+	PdfFile string `json:"pdfFile"`
+	Tenant  string `json:"tenant"`
 }

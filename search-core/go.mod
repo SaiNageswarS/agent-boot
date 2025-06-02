@@ -3,8 +3,8 @@ module github.com/SaiNageswarS/agent-boot/search-core
 go 1.23.9
 
 require (
-	github.com/SaiNageswarS/gizmo v0.0.1
-	github.com/SaiNageswarS/go-api-boot v1.0.8
+	github.com/SaiNageswarS/gizmo v0.0.4
+	github.com/SaiNageswarS/go-api-boot v1.0.11
 	github.com/pkoukk/tiktoken-go v0.1.7
 	go.mongodb.org/mongo-driver v1.15.1
 	go.temporal.io/sdk v1.34.0

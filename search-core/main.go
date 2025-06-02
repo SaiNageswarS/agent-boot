@@ -20,7 +20,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	temporalClient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 	"go.uber.org/zap"
 )
 
@@ -35,8 +34,8 @@ func main() {
 		logger.Fatal("Failed to load config", zap.Error(err))
 	}
 
-	cloud := &cloud.Azure{}
-	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(ccfgg.MongoUri))
+	cloud := cloud.ProvideAzure(&ccfgg.BootConfig)
+	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(ccfgg.MongoURI))
 	if err != nil {
 		logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
 	}
@@ -45,20 +44,16 @@ func main() {
 		GRPCPort(":50051"). // or ":0" for dynamic
 		HTTPPort(":8080").
 		Provide(ccfgg).
+		Provide(cloud).
 		ProvideAs(mongoClient, (*odm.MongoClient)(nil)).
 		// Add Workers
 		WithTemporal("search-core", &temporalClient.Options{
 			HostPort: ccfgg.TemporalHostPort,
 		}).
-		RegisterTemporalWorker(func(c temporalClient.Client, w worker.Worker) {
-			// Register the workflow
-			w.RegisterWorkflow(workers.IndexPdfFileWorkflow)
-
-			// Register the activities
-			w.RegisterActivity(workers.ProvideIndexerActivities(ccfgg, cloud))
-		}).
+		RegisterTemporalActivity(workers.ProvideIndexerActivities).
+		RegisterTemporalWorkflow(workers.IndexFileWorkflow).
 		// Register gRPC service impls
-		Register(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
+		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
 		Build()
 
 	if err != nil {

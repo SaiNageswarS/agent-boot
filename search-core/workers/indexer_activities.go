@@ -24,9 +24,9 @@ func ProvideIndexerActivities(ccfg *appconfig.AppConfig, cloud cloud.Cloud) *Ind
 	}
 }
 
-func (s *IndexerActivities) ChunkPDF(ctx context.Context, pdfUrl string) (string, error) {
+func (s *IndexerActivities) ChunkPDF(ctx context.Context, tenant, pdfFile string) (string, error) {
 	// Download the PDF file to a temporary location
-	pdfPath, err := s.cloud.DownloadFile(ctx, s.ccfg.SearchIndexBucket, pdfUrl)
+	pdfPath, err := s.cloud.DownloadFile(ctx, s.ccfg.SearchIndexBucket, tenant+"/"+pdfFile)
 	if err != nil {
 		return "", errors.New("failed to download PDF file: " + err.Error())
 	}

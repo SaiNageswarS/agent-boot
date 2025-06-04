@@ -1,16 +1,20 @@
 package workers
 
 type Chunk struct {
-	ID        string      `json:"id"`
-	Text      string      `json:"text"`
-	Page      int         `json:"page"`
-	Vectors   [][]float32 // [general, medical, objective]
-	Summary   string      `json:"summary"`
-	SourcePDF string      `json:"sourcePdf"`
+	ChunkID     string   `json:"chunkId"`
+	SectionPath []string `json:"sectionPath"`
+	TokenStart  int      `json:"tokenStart"`
+	TokenEnd    int      `json:"tokenEnd"`
+	CreatedAt   string   `json:"createdAt"`  // ISO 8601 format
+	Embedding   string   `json:"embedding"`  // e.g., "text-embedding-3-small"
+	PHIRemoved  bool     `json:"phiRemoved"` // true if PHI is removed, false otherwise
+	SourceURI   string   `json:"sourceUri"`  // e.g., "file://path/to/file.pdf"
+	Body        string   `json:"body"`       // The actual content of the chunk
 }
 
 type IndexerWorkflowState struct {
-	PdfFile  string `json:"pdfFile"`
-	Tenant   string `json:"tenant"`
-	Markdown string `json:"markdown"` // For future use, if needed
+	PdfFile            string `json:"pdfFile"`
+	Tenant             string `json:"tenant"`
+	Markdown           string `json:"markdown"` // For future use, if needed
+	MdSectionChunksUrl string `json:"mdSectionChunksUrl"`
 }

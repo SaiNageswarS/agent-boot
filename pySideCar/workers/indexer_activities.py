@@ -34,12 +34,13 @@ class IndexerActivities:
         md_text = pymupdf4llm.to_markdown(pdf_file_path)
         
         # upload to Azure Blob Storage
-        md_file_path = self._azure_storage.upload_bytes(blob_name.replace('.pdf', '.md'), md_text.encode('utf-8'))
+        md_file_name = pdf_file_name.replace('.pdf', '.md')
+        self._azure_storage.upload_bytes(f"{tenant}/{md_file_name}", md_text.encode('utf-8'))
         
         # Here you would implement the actual conversion logic
         # For now, we just simulate it by renaming the file
 
-        logging.info(f"Converted {pdf_file_path} to {md_file_path}")
+        logging.info(f"Converted {pdf_file_name} to {md_file_name}")
         
-        return md_file_path
+        return md_file_name
 

@@ -44,7 +44,7 @@ func main() {
 		GRPCPort(":50051"). // or ":0" for dynamic
 		HTTPPort(":8080").
 		Provide(ccfgg).
-		ProvideAs(az, (*cloud.Cloud)(nil)).
+		Provide(az).
 		ProvideAs(mongoClient, (*odm.MongoClient)(nil)).
 		// Add Workers
 		WithTemporal("search-core", &temporalClient.Options{

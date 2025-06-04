@@ -3,12 +3,12 @@ module github.com/SaiNageswarS/agent-boot/search-core
 go 1.23.9
 
 require (
-	github.com/SaiNageswarS/gizmo v0.0.4
-	github.com/SaiNageswarS/go-api-boot v1.0.12
-	github.com/pkoukk/tiktoken-go v0.1.7
+	github.com/SaiNageswarS/go-api-boot v1.0.13
+	github.com/yuin/goldmark v1.4.13
 	go.mongodb.org/mongo-driver v1.15.1
 	go.temporal.io/sdk v1.34.0
 	go.uber.org/zap v1.18.1
+	golang.org/x/crypto v0.37.0
 	google.golang.org/grpc v1.72.2
 )
 
@@ -32,7 +32,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
-	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -81,7 +80,6 @@ require (
 	go.temporal.io/api v1.46.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
-	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/exp v0.0.0-20230310171629-522b1b587ee0 // indirect
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/oauth2 v0.26.0 // indirect

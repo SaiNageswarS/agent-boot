@@ -30,7 +30,7 @@ async def main():
 
     worker = Worker(
         client,
-        task_queue="search-core",
+        task_queue=env_config["temporal_py_task_queue"],
         activities=[activities.convert_pdf_to_md],
     )
 

@@ -14,6 +14,7 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/config"
 	"github.com/SaiNageswarS/go-api-boot/dotenv"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-api-boot/server"
@@ -35,6 +36,11 @@ func main() {
 	}
 
 	az := cloud.ProvideAzure(&ccfgg.BootConfig)
+	llmClient, err := llm.ProvideAnthropicClient()
+	if err != nil {
+		logger.Fatal("Failed to create Anthropic client", zap.Error(err))
+	}
+
 	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(ccfgg.MongoURI))
 	if err != nil {
 		logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
@@ -45,6 +51,7 @@ func main() {
 		HTTPPort(":8080").
 		Provide(ccfgg).
 		Provide(az).
+		Provide(llmClient).
 		ProvideAs(mongoClient, (*odm.MongoClient)(nil)).
 		// Add Workers
 		WithTemporal("search-core", &temporalClient.Options{

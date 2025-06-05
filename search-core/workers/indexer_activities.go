@@ -9,6 +9,7 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"go.uber.org/zap"
 )
@@ -19,7 +20,7 @@ type IndexerActivities struct {
 	chunker *MarkdownChunker
 }
 
-func ProvideIndexerActivities(ccfg *appconfig.AppConfig, az *cloud.Azure) *IndexerActivities {
+func ProvideIndexerActivities(ccfg *appconfig.AppConfig, az *cloud.Azure, llmClient *llm.AnthropicClient) *IndexerActivities {
 	if err := az.EnsureBlob(context.Background()); err != nil {
 		logger.Fatal("Failed to ensure Azure Blob Client", zap.Error(err))
 	}
@@ -27,7 +28,7 @@ func ProvideIndexerActivities(ccfg *appconfig.AppConfig, az *cloud.Azure) *Index
 	return &IndexerActivities{
 		ccfg:    ccfg,
 		az:      az,
-		chunker: ProvideMarkdownChunker(),
+		chunker: ProvideMarkdownChunker(llmClient),
 	}
 }
 

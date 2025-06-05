@@ -6,6 +6,7 @@ import (
 	pb "agent-boot/proto/generated"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"google.golang.org/grpc/codes"
@@ -29,7 +30,7 @@ func (u *LoginService) AuthFuncOverride(ctx context.Context, fullMethodName stri
 }
 
 func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.AuthResponse, error) {
-	loginInfo, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Tenant).FindOneByID(ctx, db.LoginModel{
+	loginInfo, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Tenant).FindOneByID(ctx, db.LoginModel{
 		EmailId: req.Email}.Id()))
 	if err != nil || loginInfo == nil {
 		return nil, status.Error(codes.NotFound, "User not found")

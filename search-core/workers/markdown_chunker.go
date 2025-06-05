@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
-	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -34,7 +34,8 @@ func ProvideMarkdownChunker(llmClient *llm.AnthropicClient) *MarkdownChunker {
 
 // Chunks Markdown by sections.
 func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, fileName string, markdown []byte) ([]Chunk, error) {
-	titleResultChan := c.generateTitle(ctx, markdown)
+	maxIntroBytes := min(2500, len(markdown)) // Limit intro snippet to 1000 bytes or less
+	titleResultChan := prompts.GenerateTitle(ctx, c.llmClient, string(markdown[0:maxIntroBytes]))
 
 	sections, err := parseMarkdownSections(markdown)
 	if err != nil {
@@ -43,7 +44,7 @@ func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, fileName st
 	}
 
 	// Wait for title generation
-	title, err := odm.Await(titleResultChan)
+	title, err := async.Await(titleResultChan)
 	if err != nil {
 		logger.Error("Failed to generate title", zap.Error(err))
 		return nil, err
@@ -124,29 +125,6 @@ func parseMarkdownSections(md []byte) ([]markdownSection, error) {
 		return nil, errors.New("no headings found")
 	}
 	return out, nil
-}
-
-func (c *MarkdownChunker) generateTitle(ctx context.Context, md []byte) <-chan odm.Result[string] {
-	ch := make(chan odm.Result[string], 1)
-
-	go func() {
-		defer close(ch)
-
-		// chunk md
-		maxBytes := min(2500, len(md))
-		introDocSnippet := string(md[0:maxBytes])
-
-		title, err := prompts.GenerateTitle(c.llmClient, introDocSnippet)
-		if err != nil {
-			logger.Error("Failed to generate title", zap.Error(err))
-			ch <- odm.Result[string]{Err: err}
-			return
-		}
-
-		ch <- odm.Result[string]{Data: title}
-	}()
-
-	return ch
 }
 
 type markdownSection struct {

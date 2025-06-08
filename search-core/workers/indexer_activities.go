@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
@@ -32,20 +32,32 @@ func ProvideIndexerActivities(ccfg *appconfig.AppConfig, az *cloud.Azure, llmCli
 	}
 }
 
-func (s *IndexerActivities) ChunkMarkdown(ctx context.Context, tenant, markdownFile string) (string, error) {
-	markDownBytes, err := getBytes(s.az.DownloadFile(ctx, s.ccfg.SearchIndexBucket, tenant+"/"+markdownFile))
+// ChunkMarkdown processes a markdown file, chunks it into sections, and uploads the chunks to Azure Blob Storage.
+// It returns the paths to the uploaded chunks JSON file. Each chunk is uploaded as a separate file in the specified {tenant}/{markdownFile} directory.
+func (s *IndexerActivities) ChunkMarkdown(ctx context.Context, tenant, markdownFile, sectionsOutputPath string) ([]string, error) {
+	markDownBytes, err := getBytes(s.az.DownloadFile(ctx, tenant, markdownFile))
 	if err != nil {
-		return "", errors.New("failed to download PDF file: " + err.Error())
+		return []string{}, errors.New("failed to download PDF file: " + err.Error())
 	}
 
 	// Chunk the PDF file
 	chunks, err := s.chunker.ChunkMarkdownSections(ctx, markdownFile, markDownBytes)
 	if err != nil {
-		return "", errors.New("failed to chunk PDF file: " + err.Error())
+		return []string{}, errors.New("failed to chunk PDF file: " + err.Error())
 	}
 
-	// Upload the chunks JSON to the cloud
-	return writeToStorage(ctx, s.az, s.ccfg.SearchIndexBucket, tenant+"/"+filepath.Base(markdownFile)+".chunks.json", chunks)
+	// write combined sections to a single file for debugging purposes
+	combinedSectionsFile := fmt.Sprintf("%s/combined_sections.json", sectionsOutputPath)
+	writeToStorage(ctx, s.az, tenant, combinedSectionsFile, chunks)
+
+	var sectionChunkPaths []string
+	for _, chunk := range chunks {
+		chunkPath := fmt.Sprintf("%s/%s.chunk.json", sectionsOutputPath, chunk.ChunkID)
+		writeToStorage(ctx, s.az, tenant, chunkPath, chunk)
+		sectionChunkPaths = append(sectionChunkPaths, chunkPath)
+	}
+
+	return sectionChunkPaths, nil
 }
 
 func getBytes(filePath string, err error) ([]byte, error) {
@@ -60,6 +72,7 @@ func getBytes(filePath string, err error) ([]byte, error) {
 	return data, nil
 }
 
+// Each tenant has separate bucket in Azure Blob Storage.
 func writeToStorage(ctx context.Context, az *cloud.Azure, bucket, filePath string, data interface{}) (string, error) {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {

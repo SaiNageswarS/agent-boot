@@ -1,6 +1,12 @@
 import logging
 from temporalio import activity
+from dataclasses import asdict
+
 from azure_storage import AzureStorage
+
+from workers.indexer_types import Enhancement, parse_chunk_from_file
+from workers.window_chunker import WindowChunker
+from workers.medical_entity_processor import MedicalEntityProcessor
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -10,6 +16,9 @@ class IndexerActivities:
     def __init__(self, config: dict[str, str], azure_storage: AzureStorage):
         self._config = config
         self._azure_storage = azure_storage
+
+        self.window_chunker = WindowChunker()
+        self.medical_entity_processor = MedicalEntityProcessor()
 
     @activity.defn(name="convert_pdf_to_md")
     async def convert_pdf_to_md(self, tenant: str, pdf_file_name: str) -> str:
@@ -24,18 +33,17 @@ class IndexerActivities:
         """
         import pymupdf4llm 
 
-        blob_name = f"{tenant}/{pdf_file_name}"
-        logging.info(f"Starting conversion of {blob_name} to Markdown")
+        logging.info(f"Starting conversion of {pdf_file_name} to Markdown")
         
         # Download the PDF file from Azure Blob Storage
-        pdf_file_path = self._azure_storage.download_file(blob_name)
+        pdf_file_path = self._azure_storage.download_file(tenant, pdf_file_name)
         
         # Convert the PDF to Markdown (placeholder for actual conversion logic)
         md_text = pymupdf4llm.to_markdown(pdf_file_path)
         
         # upload to Azure Blob Storage
         md_file_name = pdf_file_name.replace('.pdf', '.md')
-        self._azure_storage.upload_bytes(f"{tenant}/{md_file_name}", md_text.encode('utf-8'))
+        self._azure_storage.upload_bytes(tenant, md_file_name, md_text.encode('utf-8'))
         
         # Here you would implement the actual conversion logic
         # For now, we just simulate it by renaming the file
@@ -44,3 +52,41 @@ class IndexerActivities:
         
         return md_file_name
 
+    @activity.defn(name="window_section_chunks")
+    async def window_section_chunks(self, tenant: str, md_section_json_url: str, enhacement: Enhancement, windows_output_path: str) -> list[str]:
+        """
+        Process Markdown sections into windowed chunks.
+        
+        Args:
+            tenant (str): The tenant identifier.
+            md_section_json_url (str): JSON URL of a single Markdown section.
+            enhacement (Enhancement): The type of enhancement to apply (e.g., medical entities) specfic to RAG domain.
+        
+        Returns:
+            list[str]: Storage blob path of windows.
+        """
+        logging.info(f"Processing Markdown sections for tenant {tenant}")
+        
+        # Convert JSON string to list of sections
+        import json
+
+        md_section_json_file = self._azure_storage.download_file(tenant, md_section_json_url)
+        md_section = parse_chunk_from_file(md_section_json_file)
+        
+        # Process the sections into windowed chunks
+        window_chunks = self.window_chunker.chunk_windows(md_section)
+
+        if enhacement == Enhancement.MEDICAL_ENTITIES:
+            logging.info("Applying medical entity enhancement to windowed chunks")
+            window_chunks = [self.medical_entity_processor.process_chunk(chunk) for chunk in window_chunks]
+
+        result = []
+        for window_chunk in window_chunks:
+            window_chunk_json = json.dumps(asdict(window_chunk))
+            blob_path = f"{windows_output_path}/{window_chunk.chunkId}.chunk.json"
+            self._azure_storage.upload_bytes(tenant, blob_path, window_chunk_json.encode('utf-8'))
+
+            result.append(blob_path)
+
+        return result
+    

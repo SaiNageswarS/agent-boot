@@ -31,7 +31,8 @@ async def main():
     worker = Worker(
         client,
         task_queue=env_config["temporal_py_task_queue"],
-        activities=[activities.convert_pdf_to_md],
+        activities=[activities.convert_pdf_to_md,
+                    activities.window_section_chunks],
     )
 
     logger.info("🚀 Starting Temporal Worker...")

@@ -30,9 +30,7 @@ class AzureStorage:
 
         return self._blob_client
     
-    def download_file(self, blob_name: str) -> str:
-        container_name = self._config["search_index_bucket"]
-
+    def download_file(self, container_name: str, blob_name: str) -> str:
         file_name = Path(blob_name).name
         temp_dir = tempfile.mkdtemp(prefix="azure_download_")
         tmp_file_path = Path(temp_dir).joinpath(file_name)
@@ -49,9 +47,7 @@ class AzureStorage:
         logger.info("File downloaded successfully: %s", tmp_file_path)
         return str(tmp_file_path)
     
-    def upload_bytes(self, blob_name: str, data: bytes) -> str:
-        container_name = self._config["search_index_bucket"]
-
+    def upload_bytes(self, container_name: str, blob_name: str, data: bytes) -> str:
         try:
             blob = self.blob_client.get_blob_client(container=container_name, blob=blob_name)
             blob.upload_blob(data, overwrite=True)

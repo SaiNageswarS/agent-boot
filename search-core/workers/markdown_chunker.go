@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
@@ -45,6 +44,8 @@ func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, fileName st
 
 	// Wait for title generation
 	title, err := async.Await(titleResultChan)
+	logger.Info("Title generated", zap.String("title", title))
+
 	if err != nil {
 		logger.Error("Failed to generate title", zap.Error(err))
 		return nil, err
@@ -52,7 +53,7 @@ func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, fileName st
 
 	var out []Chunk
 	for idx, sec := range sections {
-		secHash := hash(fileName + strings.Join(sec.path, "|"))
+		secHash := hash(sec.body)
 
 		secChunk := Chunk{
 			ChunkID:      fmt.Sprintf("%s-%s", fileName, secHash),
@@ -67,6 +68,7 @@ func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, fileName st
 		out = append(out, secChunk)
 	}
 
+	logger.Info("Markdown sections chunked", zap.Int("sectionCount", len(out)), zap.String("fileName", fileName))
 	return out, nil
 }
 

@@ -9,16 +9,17 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/odm"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type LoginService struct {
 	pb.UnimplementedLoginServer
-	mongo odm.MongoClient
+	mongo *mongo.Client
 }
 
-func ProvideLoginService(mongo odm.MongoClient) *LoginService {
+func ProvideLoginService(mongo *mongo.Client) *LoginService {
 	return &LoginService{
 		mongo: mongo,
 	}

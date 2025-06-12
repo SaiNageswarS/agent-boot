@@ -7,10 +7,8 @@ from enum import Enum
 @dataclass
 class Chunk:
     chunkId: str
-    sectionPath: List[str]
+    sectionPath: str
     sectionIndex: int                       # Index of the section in the path
-    createdAt: str                          # ISO 8601 format
-    embedding: str                          # e.g., "text-embedding-3-small"
     phiRemoved: bool                        # true if PHI is removed, false otherwise
     sourceUri: str                          # e.g., "file://path/to/file.pdf"
     body: str                               # The actual content of the chunk

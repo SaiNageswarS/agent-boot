@@ -3,20 +3,19 @@ package workers
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"errors"
-	"fmt"
-	"time"
+	"strings"
 
+	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
 	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/blake2s"
 )
 
 const maxSectionDepth = 4 // Maximum depth of section hierarchy to chunk
@@ -32,7 +31,7 @@ func ProvideMarkdownChunker(llmClient *llm.AnthropicClient) *MarkdownChunker {
 }
 
 // Chunks Markdown by sections.
-func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, fileName string, markdown []byte) ([]Chunk, error) {
+func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
 	maxIntroBytes := min(2500, len(markdown)) // Limit intro snippet to 1000 bytes or less
 	titleResultChan := prompts.GenerateTitle(ctx, c.llmClient, string(markdown[0:maxIntroBytes]))
 
@@ -51,31 +50,25 @@ func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, fileName st
 		return nil, err
 	}
 
-	var out []Chunk
+	var out []db.ChunkModel
 	for idx, sec := range sections {
-		secHash := hash(sec.body)
+		secHash, _ := odm.HashedKey(sec.body)
+		secPath := "#" + title + " " + strings.Join(sec.path, " ##")
 
-		secChunk := Chunk{
-			ChunkID:      fmt.Sprintf("%s-%s", fileName, secHash),
-			SectionPath:  append([]string{title}, sec.path...),
+		secChunk := db.ChunkModel{
+			ChunkID:      secHash,
+			SectionPath:  secPath,
 			SectionIndex: idx + 1, // 1-based index
-			CreatedAt:    time.Now().Format(time.RFC3339),
 			PHIRemoved:   false,
-			SourceURI:    fileName,
+			SourceURI:    sourceUri,
 			Body:         sec.body,
 		}
 
 		out = append(out, secChunk)
 	}
 
-	logger.Info("Markdown sections chunked", zap.Int("sectionCount", len(out)), zap.String("fileName", fileName))
+	logger.Info("Markdown sections chunked", zap.Int("sectionCount", len(out)), zap.String("fileName", sourceUri))
 	return out, nil
-}
-
-func hash(s string) string {
-	h, _ := blake2s.New256(nil)
-	h.Write([]byte(s))
-	return hex.EncodeToString(h.Sum(nil))[:10]
 }
 
 func parseMarkdownSections(md []byte) ([]markdownSection, error) {

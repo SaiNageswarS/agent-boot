@@ -18,8 +18,6 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-api-boot/server"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	temporalClient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 )
@@ -41,7 +39,7 @@ func main() {
 		logger.Fatal("Failed to create Anthropic client", zap.Error(err))
 	}
 
-	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(ccfgg.MongoURI))
+	mongoClient, err := odm.GetClient()
 	if err != nil {
 		logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
 	}
@@ -52,13 +50,14 @@ func main() {
 		Provide(ccfgg).
 		Provide(az).
 		Provide(llmClient).
-		ProvideAs(mongoClient, (*odm.MongoClient)(nil)).
+		Provide(mongoClient).
 		// Add Workers
 		WithTemporal("search-core", &temporalClient.Options{
 			HostPort: ccfgg.TemporalHostPort,
 		}).
 		RegisterTemporalActivity(workers.ProvideIndexerActivities).
 		RegisterTemporalWorkflow(workers.IndexFileWorkflow).
+		RegisterTemporalWorkflow(workers.InitTenantWorkflow).
 		// Register gRPC service impls
 		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
 		Build()

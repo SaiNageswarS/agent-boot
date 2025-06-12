@@ -1,5 +1,5 @@
 import logging
-import spacy
+import spacy, gc
 import tiktoken
 from workers.indexer_types import Chunk
 
@@ -14,6 +14,7 @@ class WindowChunker:
         if "sentencizer" not in self.nlp.pipe_names:          # fail-safe
             self.nlp.add_pipe("sentencizer")
 
+        self.nlp.max_length = 1_000_000  # Set a high limit for large texts
         self.encoding = tiktoken.get_encoding("cl100k_base")
 
 
@@ -66,8 +67,6 @@ class WindowChunker:
                     chunkId=f"{section_chunk.chunkId}_{w_idx}",
                     sectionPath=section_chunk.sectionPath,
                     sectionIndex=section_chunk.sectionIndex,
-                    createdAt=section_chunk.createdAt,
-                    embedding=section_chunk.embedding,
                     phiRemoved=section_chunk.phiRemoved,
                     sourceUri=section_chunk.sourceUri,
                     body=window_text,
@@ -93,6 +92,8 @@ class WindowChunker:
 
         logger.info(f"Created {len(result)} windowed chunks for {section_chunk.chunkId} section chunks.")
         logger.info(f"Max window text length: {max_window_text_len} characters.")
+
+        gc.collect()
         return result
     
     def __count_tokens__(self, text: str) -> int:
@@ -107,7 +108,7 @@ class WindowChunker:
         """
         return len(self.encoding.encode(text)) if text else 0
     
-    def __split_sentences__(self, text: str, max_spacy_length = 1_000_000) -> list[str]:
+    def __split_sentences__(self, text: str) -> list[str]:
         """
         Splits a text into sentences using the spaCy sentencizer.
         
@@ -126,7 +127,7 @@ class WindowChunker:
         pos = 0
         # Split text into manageable chunks
         while pos < len(text):
-            chunk_end = min(pos + max_spacy_length, len(text))
+            chunk_end = min(pos + self.nlp.max_length, len(text))
             chunk = text[pos:chunk_end]
 
             doc = self.nlp(chunk)

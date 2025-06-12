@@ -29,19 +29,26 @@ func IndexFileWorkflow(ctx workflow.Context, state IndexerWorkflowState) (Indexe
 	}
 
 	// Output paths for the markdown file and its sections
+	sourceUri := ""
+	if state.PdfFile != "" {
+		sourceUri = "file://" + state.PdfFile
+	} else if state.MarkdownFile != "" {
+		sourceUri = "file://" + state.MarkdownFile
+	}
+
 	baseFilePath := fileNameWithoutExtension(state.MarkdownFile)
 	sectionsOutputPath := baseFilePath + "_sections"
 	windowsOutputPath := baseFilePath + "_windows"
 
 	// chunk markdown
 	if len(state.MdSectionChunkUrls) == 0 && state.MarkdownFile != "" {
-		err := workflow.ExecuteActivity(ctx, (*IndexerActivities).ChunkMarkdown, state.Tenant, state.MarkdownFile, sectionsOutputPath).Get(ctx, &state.MdSectionChunkUrls)
+		err := workflow.ExecuteActivity(ctx, (*Activities).ChunkMarkdown, state.Tenant, sourceUri, state.MarkdownFile, sectionsOutputPath).Get(ctx, &state.MdSectionChunkUrls)
 		if err != nil {
 			return state, err
 		}
 	}
 
-	if len(state.MdSectionChunkUrls) != 0 {
+	if len(state.MdSectionChunkUrls) > 0 {
 		// running in pySideCar
 		// domain specific enhancements can be applied here, e.g., medical_entities
 		for _, sectionChunkUrl := range state.MdSectionChunkUrls {
@@ -55,7 +62,25 @@ func IndexFileWorkflow(ctx workflow.Context, state IndexerWorkflowState) (Indexe
 		}
 	}
 
+	if len(state.WindowChunkUrls) > 0 {
+		// Embed and store each chunk
+		for _, chunkUrl := range state.WindowChunkUrls {
+			err := workflow.ExecuteActivity(ctx, (*Activities).EmbedAndStoreChunk, state.Tenant, chunkUrl).Get(ctx, nil)
+			if err != nil {
+				return state, err
+			}
+		}
+	}
+
 	return state, nil
+}
+
+func InitTenantWorkflow(ctx workflow.Context, tenant string) error {
+	activityOpts := workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute * 10,
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOpts)
+	return workflow.ExecuteActivity(ctx, (*Activities).InitTenant, tenant).Get(ctx, nil)
 }
 
 func fileNameWithoutExtension(fileName string) string {

@@ -8,3 +8,7 @@ type IndexerWorkflowState struct {
 	MdSectionChunkUrls []string `json:"mdSectionChunksUrls"`
 	WindowChunkUrls    []string `json:"windowChunkUrls"` // URL for window chunks
 }
+
+type InitTenantWorkflowInput struct {
+	Tenant string `json:"tenant"`
+}

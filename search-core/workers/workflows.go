@@ -75,12 +75,12 @@ func IndexFileWorkflow(ctx workflow.Context, state IndexerWorkflowState) (Indexe
 	return state, nil
 }
 
-func InitTenantWorkflow(ctx workflow.Context, tenant string) error {
+func InitTenantWorkflow(ctx workflow.Context, input InitTenantWorkflowInput) error {
 	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Minute * 10,
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
-	return workflow.ExecuteActivity(ctx, (*Activities).InitTenant, tenant).Get(ctx, nil)
+	return workflow.ExecuteActivity(ctx, (*Activities).InitTenant, input.Tenant).Get(ctx, nil)
 }
 
 func fileNameWithoutExtension(fileName string) string {

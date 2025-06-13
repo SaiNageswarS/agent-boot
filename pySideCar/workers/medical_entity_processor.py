@@ -56,16 +56,19 @@ class MedicalEntityProcessor:
         Returns:
             EnrichedChunk with medical entity information
         """
-        logger.debug(f"Processing chunk: {chunk.chunkId}")
+        logger.info(f"Applying medical tags to : {chunk.chunkId}")
 
         # Process main chunk body
         doc = self.nlp(chunk.body)
         entities = self._extract_entities(doc, chunk.body)
+
+        logger.info(f"Found {len(entities)} medical entities in chunk: {chunk.chunkId}")    
         
         # Process section path for additional context
-        section_text = " > ".join(chunk.sectionPath)
-        section_doc = self.nlp(section_text)
-        section_entities = self._extract_entities(section_doc, section_text)
+        section_doc = self.nlp(chunk.sectionPath)
+        section_entities = self._extract_entities(section_doc, chunk.sectionPath)
+
+        logger.info(f"Found {len(section_entities)} medical entities in section path: {chunk.sectionPath}")
             
         # Create enriched chunk with combined entities and abbreviations
         chunk.tags = entities + section_entities

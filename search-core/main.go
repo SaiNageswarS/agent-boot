@@ -39,6 +39,11 @@ func main() {
 		logger.Fatal("Failed to create Anthropic client", zap.Error(err))
 	}
 
+	embeddingClient, err := llm.ProvideJinaAIEmbeddingClient()
+	if err != nil {
+		logger.Fatal("Failed to create Jina AI embedding client", zap.Error(err))
+	}
+
 	mongoClient, err := odm.GetClient()
 	if err != nil {
 		logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
@@ -50,6 +55,7 @@ func main() {
 		Provide(ccfgg).
 		Provide(az).
 		Provide(llmClient).
+		Provide(embeddingClient).
 		Provide(mongoClient).
 		// Add Workers
 		WithTemporal("search-core", &temporalClient.Options{

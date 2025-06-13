@@ -83,7 +83,7 @@ func (s *Activities) EmbedAndStoreChunk(ctx context.Context, tenant, chunkPath s
 	}
 
 	// Embed the chunk using the LLM client
-	embeddings, err := async.Await(s.embedder.GetEmbedding(ctx, llm.JinaAIEmbeddingRequest{Input: []string{chunkModel.SectionPath + " " + chunkModel.Body}}))
+	embeddings, err := async.Await(s.embedder.GetEmbedding(ctx, llm.JinaAIEmbeddingRequest{Input: []string{chunkModel.SectionPath + "\n" + chunkModel.Body}}))
 	if err != nil {
 		return errors.New("failed to embed chunk: " + err.Error())
 	}
@@ -103,6 +103,7 @@ func (s *Activities) InitTenant(ctx context.Context, tenant string) error {
 		logger.Error("Failed to initialize search core DB", zap.String("tenant", tenant), zap.Error(err))
 		return err
 	}
+	logger.Info("Search core DB initialized", zap.String("tenant", tenant))
 
 	// Initialize Azure Blob Storage bucket for the tenant
 	if err := s.az.EnsureBucket(ctx, tenant); err != nil {
@@ -110,6 +111,7 @@ func (s *Activities) InitTenant(ctx context.Context, tenant string) error {
 		return err
 	}
 
+	logger.Info("Azure Container ensured", zap.String("tenant", tenant))
 	return nil
 }
 

@@ -48,27 +48,20 @@ func IndexFileWorkflow(ctx workflow.Context, state IndexerWorkflowState) (Indexe
 		}
 	}
 
-	if len(state.MdSectionChunkUrls) > 0 {
+	if len(state.WindowChunkUrls) == 0 && len(state.MdSectionChunkUrls) > 0 {
 		// running in pySideCar
 		// domain specific enhancements can be applied here, e.g., medical_entities
-		for _, sectionChunkUrl := range state.MdSectionChunkUrls {
-			var windowChunksUrls []string
-			err := workflow.ExecuteActivity(pyCtx, "window_section_chunks", state.Tenant, sectionChunkUrl, state.Enhancement, windowsOutputPath).Get(ctx, &windowChunksUrls)
-			if err != nil {
-				return state, err
-			}
-
-			state.WindowChunkUrls = append(state.WindowChunkUrls, windowChunksUrls...)
+		err := workflow.ExecuteActivity(pyCtx, "window_section_chunks", state.Tenant, state.MdSectionChunkUrls, state.Enhancement, windowsOutputPath).Get(ctx, &state.WindowChunkUrls)
+		if err != nil {
+			return state, err
 		}
 	}
 
 	if len(state.WindowChunkUrls) > 0 {
 		// Embed and store each chunk
-		for _, chunkUrl := range state.WindowChunkUrls {
-			err := workflow.ExecuteActivity(ctx, (*Activities).EmbedAndStoreChunk, state.Tenant, chunkUrl).Get(ctx, nil)
-			if err != nil {
-				return state, err
-			}
+		err := workflow.ExecuteActivity(ctx, (*Activities).EmbedAndStoreChunk, state.Tenant, state.WindowChunkUrls).Get(ctx, nil)
+		if err != nil {
+			return state, err
 		}
 	}
 

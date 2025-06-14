@@ -6,9 +6,9 @@ import (
 	"embed"
 	"text/template"
 
-	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-collection-boot/async"
 	"go.uber.org/zap"
 )
 

@@ -3,19 +3,23 @@ package workers
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
-	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
+	"github.com/SaiNageswarS/go-collection-boot/async"
+	"github.com/SaiNageswarS/go-collection-boot/linq"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
 	"go.uber.org/zap"
 )
+
+const minSectionBytes = 4000 // Minimum bytes for a section to be considered valid
 
 type MarkdownChunker struct {
 	llmClient *llm.AnthropicClient
@@ -32,7 +36,7 @@ func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, sourceUri s
 	maxIntroBytes := min(2500, len(markdown)) // Limit intro snippet to 1000 bytes or less
 	titleResultChan := prompts.GenerateTitle(ctx, c.llmClient, string(markdown[0:maxIntroBytes]))
 
-	sections, err := parseMarkdownSections(markdown, 2000)
+	sections, err := parseMarkdownSections(markdown, minSectionBytes)
 	if err != nil {
 		logger.Error("Failed to parse markdown sections", zap.Error(err))
 		return nil, err
@@ -50,7 +54,8 @@ func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, sourceUri s
 	var out []db.ChunkModel
 	for idx, sec := range sections {
 		secHash, _ := odm.HashedKey(sec.body)
-		secPath := getSectionPath(title, sec.path)
+		sec.path = slices.Insert(sec.path, 0, title) // Insert title at the beginning of the path
+		secPath := strings.Join(sec.path, " | ") + "\n\n"
 
 		secChunk := db.ChunkModel{
 			ChunkID:      secHash,
@@ -137,25 +142,15 @@ func parseMarkdownSections(md []byte, minBytes int) ([]markdownSection, error) {
 		if len(s.body) < minBytes && len(merged) > 0 {
 			prev := &merged[len(merged)-1]
 			prev.body += "\n\n" + s.body
+			// Append the current section's path to the previous section's path
+			prev.path = append(prev.path, s.path...)
+			prev.path = linq.From(prev.path).
+				Distinct().ToSlice()
 		} else {
 			merged = append(merged, s)
 		}
 	}
 	return merged, nil
-}
-
-func getSectionPath(title string, sectionHeaders []string) string {
-	if len(sectionHeaders) == 0 {
-		return ""
-	}
-
-	out := "# " + title + "\n"
-	for i, header := range sectionHeaders {
-		out = out + strings.Repeat("#", i+2) + " " + header + "\n"
-	}
-
-	// Join section headers with " ##" to create the path
-	return out
 }
 
 type markdownSection struct {

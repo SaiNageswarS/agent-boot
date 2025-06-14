@@ -6,9 +6,9 @@ import (
 	pb "agent-boot/proto/generated"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
-	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/odm"
+	"github.com/SaiNageswarS/go-collection-boot/async"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

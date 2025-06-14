@@ -3,7 +3,8 @@ module github.com/SaiNageswarS/agent-boot/search-core
 go 1.23.9
 
 require (
-	github.com/SaiNageswarS/go-api-boot v1.0.21
+	github.com/SaiNageswarS/go-api-boot v1.0.22
+	github.com/SaiNageswarS/go-collection-boot v0.0.0-20250614082244-fe97fc498ab9
 	github.com/yuin/goldmark v1.4.13
 	go.mongodb.org/mongo-driver/v2 v2.2.2
 	go.temporal.io/sdk v1.34.0

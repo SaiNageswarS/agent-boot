@@ -114,8 +114,10 @@ cloud.google.com/go/webrisk v1.9.7/go.mod h1:7FkQtqcKLeNwXCdhthdXHIQNcFWPF/Oubrl
 cloud.google.com/go/websecurityscanner v1.6.7/go.mod h1:EpiW84G5KXxsjtFKK7fSMQNt8JcuLA8tQp7j0cyV458=
 cloud.google.com/go/workflows v1.12.6/go.mod h1:oDbEHKa4otYg4abwdw2Z094jB0TLLiFGAPA78EDAKag=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.26.0/go.mod h1:2bIszWvQRlJVmJLiuLhukLImRjKPcYdzzsx6darK02A=
-github.com/SaiNageswarS/go-api-boot v1.0.21 h1:UwXyj0Hsi2jeaabEaMsg0KU2l2xMC5+HUeccpjfWD+4=
-github.com/SaiNageswarS/go-api-boot v1.0.21/go.mod h1:A2rZ+vM4jX67nGj35Gn85/PYPerQnY27wHMewOwThQM=
+github.com/SaiNageswarS/go-api-boot v1.0.22 h1:ZhGsYsyxf/IGgaOwZikXxSGOmpgrq4yNP4s0z8IfvqQ=
+github.com/SaiNageswarS/go-api-boot v1.0.22/go.mod h1:Om66QP6pKX+5r+lHMMvNwSYIgMuDNTKUO36PWtaed0c=
+github.com/SaiNageswarS/go-collection-boot v0.0.0-20250614082244-fe97fc498ab9 h1:dSo8g2puSzux7ll7pMLi+mttFHjigPmJv7Px1WR48wo=
+github.com/SaiNageswarS/go-collection-boot v0.0.0-20250614082244-fe97fc498ab9/go.mod h1:Zpt8W8nCgucjdQyxOpQbIxzuVBnijo9y6CrEqTF6Pnc=
 github.com/adrg/strutil v0.3.1/go.mod h1:8h90y18QLrs11IBffcGX3NW/GFBXCMcNg4M7H6MspPA=
 github.com/adrg/sysfont v0.1.2/go.mod h1:6d3l7/BSjX9VaeXWJt9fcrftFaD/t7l11xgSywCPZGk=
 github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=

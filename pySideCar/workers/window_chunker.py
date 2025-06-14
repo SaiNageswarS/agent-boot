@@ -18,7 +18,7 @@ class WindowChunker:
         self.encoding = tiktoken.get_encoding("cl100k_base")
 
 
-    def chunk_windows(self, section_chunk: Chunk, window_size: int = 400, stride: int = 350) -> list[Chunk]:
+    def chunk_windows(self, section_chunk: Chunk, window_size: int = 700, stride: int = 600) -> list[Chunk]:
         """
         Splits a list of section chunks into smaller windows of 10 chunks each.
         

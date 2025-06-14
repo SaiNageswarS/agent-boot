@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 from azure_storage import AzureStorage
 
-from workers.indexer_types import Enhancement, parse_chunk_from_file
+from workers.indexer_types import MEDICAL_ENTITIES, parse_section_chunk_file
 from workers.window_chunker import WindowChunker
 from workers.medical_entity_processor import MedicalEntityProcessor
 
@@ -53,7 +53,7 @@ class IndexerActivities:
         return md_file_name
 
     @activity.defn(name="window_section_chunks")
-    async def window_section_chunks(self, tenant: str, md_section_json_url: str, enhacement: Enhancement, windows_output_path: str) -> list[str]:
+    async def window_section_chunks(self, tenant: str, md_section_json_urls: list[str], enhacement: str, windows_output_path: str) -> list[str]:
         """
         Process Markdown sections into windowed chunks.
         
@@ -65,28 +65,32 @@ class IndexerActivities:
         Returns:
             list[str]: Storage blob path of windows.
         """
-        logging.info(f"Processing Markdown sections for tenant {tenant}")
+        logging.info(f"Processing {len(md_section_json_urls)} Markdown sections for tenant {tenant}")
         
         # Convert JSON string to list of sections
         import json
 
-        md_section_json_file = self._azure_storage.download_file(tenant, md_section_json_url)
-        md_section = parse_chunk_from_file(md_section_json_file)
-        
-        # Process the sections into windowed chunks
-        window_chunks = self.window_chunker.chunk_windows(md_section)
-
-        if enhacement == Enhancement.MEDICAL_ENTITIES:
-            logging.info("Applying medical entity enhancement to windowed chunks")
-            window_chunks = [self.medical_entity_processor.process_chunk(chunk) for chunk in window_chunks]
-
         result = []
-        for window_chunk in window_chunks:
-            window_chunk_json = json.dumps(asdict(window_chunk))
-            blob_path = f"{windows_output_path}/{window_chunk.chunkId}.chunk.json"
-            self._azure_storage.upload_bytes(tenant, blob_path, window_chunk_json.encode('utf-8'))
 
-            result.append(blob_path)
+        for idx, md_section_json_url in enumerate(md_section_json_urls):
+            md_section_json_file = self._azure_storage.download_file(tenant, md_section_json_url)
+            md_section = parse_section_chunk_file(md_section_json_file)
+            
+            # Process the sections into windowed chunks
+            window_chunks = self.window_chunker.chunk_windows(md_section)
+
+            if enhacement == MEDICAL_ENTITIES:
+                logging.info("Applying medical entity enhancement to windowed chunks")
+                window_chunks = [self.medical_entity_processor.process_chunk(chunk) for chunk in window_chunks]
+
+            for window_chunk in window_chunks:
+                window_chunk_json = json.dumps(asdict(window_chunk))
+                blob_path = f"{windows_output_path}/{window_chunk.chunkId}.chunk.json"
+                self._azure_storage.upload_bytes(tenant, blob_path, window_chunk_json.encode('utf-8'))
+
+                result.append(blob_path)
+
+            activity.heartbeat({"progress": f"{idx+1}/{len(md_section_json_urls)}"})
 
         return result
     

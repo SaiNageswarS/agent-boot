@@ -16,12 +16,11 @@ class Chunk:
     abbrevations: Optional[Dict[str, str]] = None  # Optional abbreviations mapping
 
 
-class Enhancement(str, Enum):
-    NONE = "none"
-    MEDICAL_ENTITIES = "medical_entities"
+# Enhancements
+MEDICAL_ENTITIES = "medical_entities"
 
 
-def parse_chunk_from_file(file_path: str) -> Chunk:
+def parse_section_chunk_file(file_path: str) -> Chunk:
     """
     Parse a JSON file containing chunk definitions into a list of Chunk objects.
     

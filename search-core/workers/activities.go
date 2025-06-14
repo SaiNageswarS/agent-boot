@@ -9,11 +9,11 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
-	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
+	"github.com/SaiNageswarS/go-collection-boot/async"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/zap"
@@ -69,29 +69,31 @@ func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markd
 	return sectionChunkPaths, nil
 }
 
-func (s *Activities) EmbedAndStoreChunk(ctx context.Context, tenant, chunkPath string) error {
+func (s *Activities) EmbedAndStoreChunk(ctx context.Context, tenant string, chunkPaths []string) error {
 	// Download the chunk data
-	chunkData, err := getBytes(s.az.DownloadFile(ctx, tenant, chunkPath))
-	if err != nil {
-		return errors.New("failed to download chunk file: " + err.Error())
-	}
+	for _, chunkPath := range chunkPaths {
+		chunkData, err := getBytes(s.az.DownloadFile(ctx, tenant, chunkPath))
+		if err != nil {
+			return errors.New("failed to download chunk file: " + err.Error())
+		}
 
-	chunkModel := db.ChunkModel{}
-	err = json.Unmarshal(chunkData, &chunkModel)
-	if err != nil {
-		return errors.New("failed to unmarshal chunk data: " + err.Error())
-	}
+		chunkModel := db.ChunkModel{}
+		err = json.Unmarshal(chunkData, &chunkModel)
+		if err != nil {
+			return errors.New("failed to unmarshal chunk data: " + err.Error())
+		}
 
-	// Embed the chunk using the LLM client
-	embeddings, err := async.Await(s.embedder.GetEmbedding(ctx, llm.JinaAIEmbeddingRequest{Input: []string{chunkModel.SectionPath + "\n" + chunkModel.Body}}))
-	if err != nil {
-		return errors.New("failed to embed chunk: " + err.Error())
-	}
+		// Embed the chunk using the LLM client
+		embeddings, err := async.Await(s.embedder.GetEmbedding(ctx, llm.JinaAIEmbeddingRequest{Input: []string{chunkModel.SectionPath + "\n" + chunkModel.Body}}))
+		if err != nil {
+			return errors.New("failed to embed chunk: " + err.Error())
+		}
 
-	chunkModel.Embedding = bson.NewVector(embeddings)
-	_, err = async.Await(odm.CollectionOf[db.ChunkModel](s.mongo, tenant).Save(ctx, chunkModel))
-	if err != nil {
-		return errors.New("failed to save chunk to database: " + err.Error())
+		chunkModel.Embedding = bson.NewVector(embeddings)
+		_, err = async.Await(odm.CollectionOf[db.ChunkModel](s.mongo, tenant).Save(ctx, chunkModel))
+		if err != nil {
+			return errors.New("failed to save chunk to database: " + err.Error())
+		}
 	}
 
 	return nil

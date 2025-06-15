@@ -96,7 +96,7 @@ func buildSearchResponse(docs []db.ChunkModel) *pb.SearchResponse {
 	for _, doc := range docs {
 		out = append(out, &pb.Chunk{
 			Citation: doc.SourceURI,
-			Body:     doc.Body,
+			Body:     doc.SectionPath + "\n\n" + doc.Body,
 		})
 	}
 

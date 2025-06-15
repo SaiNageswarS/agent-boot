@@ -10,7 +10,8 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/agent-boot/search-core/services"
-	"github.com/SaiNageswarS/agent-boot/search-core/workers"
+	"github.com/SaiNageswarS/agent-boot/search-core/workers/activities"
+	"github.com/SaiNageswarS/agent-boot/search-core/workers/workflows"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/config"
 	"github.com/SaiNageswarS/go-api-boot/dotenv"
@@ -61,9 +62,9 @@ func main() {
 		WithTemporal("search-core", &temporalClient.Options{
 			HostPort: ccfgg.TemporalHostPort,
 		}).
-		RegisterTemporalActivity(workers.ProvideIndexerActivities).
-		RegisterTemporalWorkflow(workers.IndexFileWorkflow).
-		RegisterTemporalWorkflow(workers.InitTenantWorkflow).
+		RegisterTemporalActivity(activities.ProvideIndexerActivities).
+		RegisterTemporalWorkflow(workflows.IndexFileWorkflow).
+		RegisterTemporalWorkflow(workflows.InitTenantWorkflow).
 		// Register gRPC service impls
 		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
 		RegisterService(server.Adapt(pb.RegisterSearchServer), services.ProvideSearchService).

@@ -1,4 +1,4 @@
-package workers
+package utils
 
 import (
 	"context"
@@ -21,18 +21,18 @@ import (
 
 const minSectionBytes = 4000 // Minimum bytes for a section to be considered valid
 
-type MarkdownChunker struct {
+type MarkdownChunkerUtil struct {
 	llmClient *llm.AnthropicClient
 }
 
-func ProvideMarkdownChunker(llmClient *llm.AnthropicClient) *MarkdownChunker {
-	return &MarkdownChunker{
+func ProvideMarkdownChunkerUtil(llmClient *llm.AnthropicClient) *MarkdownChunkerUtil {
+	return &MarkdownChunkerUtil{
 		llmClient: llmClient,
 	}
 }
 
 // Chunks Markdown by sections.
-func (c *MarkdownChunker) ChunkMarkdownSections(ctx context.Context, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
+func (c *MarkdownChunkerUtil) ChunkMarkdownSections(ctx context.Context, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
 	maxIntroBytes := min(2500, len(markdown)) // Limit intro snippet to 1000 bytes or less
 	titleResultChan := prompts.GenerateTitle(ctx, c.llmClient, string(markdown[0:maxIntroBytes]))
 

@@ -1,10 +1,11 @@
-package workers
+package workflows
 
 import (
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/SaiNageswarS/agent-boot/search-core/workers/activities"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -42,7 +43,7 @@ func IndexFileWorkflow(ctx workflow.Context, state IndexerWorkflowState) (Indexe
 
 	// chunk markdown
 	if len(state.MdSectionChunkUrls) == 0 && state.MarkdownFile != "" {
-		err := workflow.ExecuteActivity(ctx, (*Activities).ChunkMarkdown, state.Tenant, sourceUri, state.MarkdownFile, sectionsOutputPath).Get(ctx, &state.MdSectionChunkUrls)
+		err := workflow.ExecuteActivity(ctx, (*activities.Activities).ChunkMarkdown, state.Tenant, sourceUri, state.MarkdownFile, sectionsOutputPath).Get(ctx, &state.MdSectionChunkUrls)
 		if err != nil {
 			return state, err
 		}
@@ -59,21 +60,13 @@ func IndexFileWorkflow(ctx workflow.Context, state IndexerWorkflowState) (Indexe
 
 	if len(state.WindowChunkUrls) > 0 {
 		// Embed and store each chunk
-		err := workflow.ExecuteActivity(ctx, (*Activities).EmbedAndStoreChunk, state.Tenant, state.WindowChunkUrls).Get(ctx, nil)
+		err := workflow.ExecuteActivity(ctx, (*activities.Activities).EmbedAndStoreChunk, state.Tenant, state.WindowChunkUrls).Get(ctx, nil)
 		if err != nil {
 			return state, err
 		}
 	}
 
 	return state, nil
-}
-
-func InitTenantWorkflow(ctx workflow.Context, input InitTenantWorkflowInput) error {
-	activityOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: time.Minute * 10,
-	}
-	ctx = workflow.WithActivityOptions(ctx, activityOpts)
-	return workflow.ExecuteActivity(ctx, (*Activities).InitTenant, input.Tenant).Get(ctx, nil)
 }
 
 func fileNameWithoutExtension(fileName string) string {

@@ -1,4 +1,4 @@
-package workers
+package workflows
 
 type IndexerWorkflowState struct {
 	PdfFile            string   `json:"pdfFile"`

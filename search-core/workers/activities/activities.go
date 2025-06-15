@@ -1,4 +1,4 @@
-package workers
+package activities
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
+	"github.com/SaiNageswarS/agent-boot/search-core/workers/utils"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
@@ -22,7 +23,7 @@ import (
 type Activities struct {
 	ccfg     *appconfig.AppConfig
 	az       *cloud.Azure
-	chunker  *MarkdownChunker
+	chunker  *utils.MarkdownChunkerUtil
 	embedder *llm.JinaAIEmbeddingClient
 	mongo    *mongo.Client
 }
@@ -36,7 +37,7 @@ func ProvideIndexerActivities(ccfg *appconfig.AppConfig, az *cloud.Azure, llmCli
 		ccfg:     ccfg,
 		az:       az,
 		embedder: embedder,
-		chunker:  ProvideMarkdownChunker(llmClient),
+		chunker:  utils.ProvideMarkdownChunkerUtil(llmClient),
 		mongo:    mongo,
 	}
 }

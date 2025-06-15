@@ -84,12 +84,15 @@ func (s *Activities) EmbedAndStoreChunk(ctx context.Context, tenant string, chun
 		}
 
 		// Embed the chunk using the LLM client
-		embeddings, err := async.Await(s.embedder.GetEmbedding(ctx, llm.JinaAIEmbeddingRequest{Input: []string{chunkModel.SectionPath + "\n" + chunkModel.Body}}))
-		if err != nil {
-			return errors.New("failed to embed chunk: " + err.Error())
+		if s.ccfg.VectorSearchEnabled {
+			embeddings, err := async.Await(s.embedder.GetEmbedding(ctx, llm.JinaAIEmbeddingRequest{Input: []string{chunkModel.SectionPath + "\n" + chunkModel.Body}}))
+			if err != nil {
+				return errors.New("failed to embed chunk: " + err.Error())
+			}
+
+			chunkModel.Embedding = bson.NewVector(embeddings)
 		}
 
-		chunkModel.Embedding = bson.NewVector(embeddings)
 		_, err = async.Await(odm.CollectionOf[db.ChunkModel](s.mongo, tenant).Save(ctx, chunkModel))
 		if err != nil {
 			return errors.New("failed to save chunk to database: " + err.Error())

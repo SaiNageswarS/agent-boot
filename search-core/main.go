@@ -66,6 +66,7 @@ func main() {
 		RegisterTemporalWorkflow(workers.InitTenantWorkflow).
 		// Register gRPC service impls
 		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
+		RegisterService(server.Adapt(pb.RegisterSearchServer), services.ProvideSearchService).
 		Build()
 
 	if err != nil {

@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+option go_package = "agent-boot/proto/generated";
+
+package search;
+
+service Search {
+    rpc Search(SearchRequest) returns (SearchResponse) {}
+}
+
+message SearchRequest {
+    repeated string queries = 1;
+}
+
+message SearchResponse {
+    repeated Chunk chunks = 1;
+}
+
+message Chunk {
+    string body = 1;
+    string citation = 2;
+}

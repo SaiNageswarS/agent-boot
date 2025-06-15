@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type Activities struct {
+type IndexerActivities struct {
 	ccfg     *appconfig.AppConfig
 	az       *cloud.Azure
 	chunker  *utils.MarkdownChunkerUtil
@@ -28,12 +28,12 @@ type Activities struct {
 	mongo    *mongo.Client
 }
 
-func ProvideIndexerActivities(ccfg *appconfig.AppConfig, az *cloud.Azure, llmClient *llm.AnthropicClient, embedder *llm.JinaAIEmbeddingClient, mongo *mongo.Client) *Activities {
+func ProvideIndexerActivities(ccfg *appconfig.AppConfig, az *cloud.Azure, llmClient *llm.AnthropicClient, embedder *llm.JinaAIEmbeddingClient, mongo *mongo.Client) *IndexerActivities {
 	if err := az.EnsureBlob(context.Background()); err != nil {
 		logger.Fatal("Failed to ensure Azure Blob Client", zap.Error(err))
 	}
 
-	return &Activities{
+	return &IndexerActivities{
 		ccfg:     ccfg,
 		az:       az,
 		embedder: embedder,
@@ -44,7 +44,7 @@ func ProvideIndexerActivities(ccfg *appconfig.AppConfig, az *cloud.Azure, llmCli
 
 // ChunkMarkdown processes a markdown file, chunks it into sections, and uploads the chunks to Azure Blob Storage.
 // It returns the paths to the uploaded chunks JSON file. Each chunk is uploaded as a separate file in the specified {tenant}/{markdownFile} directory.
-func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markdownFile, sectionsOutputPath string) ([]string, error) {
+func (s *IndexerActivities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markdownFile, sectionsOutputPath string) ([]string, error) {
 	markDownBytes, err := getBytes(s.az.DownloadFile(ctx, tenant, markdownFile))
 	if err != nil {
 		return []string{}, errors.New("failed to download PDF file: " + err.Error())
@@ -70,7 +70,7 @@ func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markd
 	return sectionChunkPaths, nil
 }
 
-func (s *Activities) EmbedAndStoreChunk(ctx context.Context, tenant string, chunkPaths []string) error {
+func (s *IndexerActivities) EmbedAndStoreChunk(ctx context.Context, tenant string, chunkPaths []string) error {
 	// Download the chunk data
 	for _, chunkPath := range chunkPaths {
 		chunkData, err := getBytes(s.az.DownloadFile(ctx, tenant, chunkPath))
@@ -100,24 +100,6 @@ func (s *Activities) EmbedAndStoreChunk(ctx context.Context, tenant string, chun
 		}
 	}
 
-	return nil
-}
-
-func (s *Activities) InitTenant(ctx context.Context, tenant string) error {
-	// Initialize DB.
-	if err := db.InitSearchCoreDB(ctx, s.mongo, tenant); err != nil {
-		logger.Error("Failed to initialize search core DB", zap.String("tenant", tenant), zap.Error(err))
-		return err
-	}
-	logger.Info("Search core DB initialized", zap.String("tenant", tenant))
-
-	// Initialize Azure Blob Storage bucket for the tenant
-	if err := s.az.EnsureBucket(ctx, tenant); err != nil {
-		logger.Error("Failed to ensure Azure Container", zap.String("tenant", tenant), zap.Error(err))
-		return err
-	}
-
-	logger.Info("Azure Container ensured", zap.String("tenant", tenant))
 	return nil
 }
 

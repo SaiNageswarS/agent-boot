@@ -12,5 +12,5 @@ func InitTenantWorkflow(ctx workflow.Context, input InitTenantWorkflowInput) err
 		StartToCloseTimeout: time.Minute * 10,
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
-	return workflow.ExecuteActivity(ctx, (*activities.Activities).InitTenant, input.Tenant).Get(ctx, nil)
+	return workflow.ExecuteActivity(ctx, (*activities.InitTenantActivities).InitTenant, input.Tenant).Get(ctx, nil)
 }

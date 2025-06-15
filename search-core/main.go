@@ -63,6 +63,7 @@ func main() {
 			HostPort: ccfgg.TemporalHostPort,
 		}).
 		RegisterTemporalActivity(activities.ProvideIndexerActivities).
+		RegisterTemporalActivity(activities.ProvideInitTenantActivities).
 		RegisterTemporalWorkflow(workflows.IndexFileWorkflow).
 		RegisterTemporalWorkflow(workflows.InitTenantWorkflow).
 		// Register gRPC service impls

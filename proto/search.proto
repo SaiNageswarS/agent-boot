@@ -13,10 +13,6 @@ message SearchRequest {
 }
 
 message SearchResponse {
-    repeated Chunk chunks = 1;
-}
-
-message Chunk {
-    string body = 1;
-    string citation = 2;
+    // The response has all the grounding data with citations. 
+    string groundingWithCitations = 1;
 }

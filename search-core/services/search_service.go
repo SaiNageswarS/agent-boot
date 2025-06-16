@@ -3,6 +3,8 @@ package services
 import (
 	pb "agent-boot/proto/generated"
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
@@ -88,21 +90,40 @@ func (s *SearchService) Search(ctx context.Context, req *pb.SearchRequest) (*pb.
 	docs := flattenSearchResults(searchResults)
 
 	// TODO: Implement ranking logic. De-Duplicate chunks by similarity between them.
-	return buildSearchResponse(docs), nil
+	return &pb.SearchResponse{GroundingWithCitations: buildSearchResponse(docs)}, nil
 }
 
-func buildSearchResponse(docs []db.ChunkModel) *pb.SearchResponse {
-	var out []*pb.Chunk
-	for _, doc := range docs {
-		out = append(out, &pb.Chunk{
-			Citation: doc.SourceURI,
-			Body:     doc.SectionPath + "\n\n" + doc.Body,
-		})
+func buildSearchResponse(docs []db.ChunkModel) string {
+	if len(docs) == 0 {
+		logger.Info("No search results found")
+		return ""
 	}
 
-	return &pb.SearchResponse{
-		Chunks: out,
+	var out strings.Builder
+
+	sourceIndex := make(map[string]int) // SourceURI -> footnote index
+	footnoteCounter := 1
+	footnotes := []string{} // Ordered list of unique sources
+
+	// Write body with reused footnote references
+	for _, r := range docs {
+		index, exists := sourceIndex[r.SourceURI]
+		if !exists {
+			sourceIndex[r.SourceURI] = footnoteCounter
+			index = footnoteCounter
+			footnoteCounter++
+			footnotes = append(footnotes, r.SourceURI)
+		}
+		fmt.Fprintf(&out, "%s[^%d]\n\n", r.Body, index)
 	}
+
+	// Write deduplicated sources
+	out.WriteString("### Sources\n")
+	for i, source := range footnotes {
+		fmt.Fprintf(&out, "[^%d]: %s\n", i+1, source)
+	}
+
+	return out.String()
 }
 
 func flattenSearchResults(searchResults [][]odm.SearchHit[db.ChunkModel]) []db.ChunkModel {

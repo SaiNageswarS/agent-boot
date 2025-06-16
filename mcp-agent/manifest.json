@@ -1,0 +1,9 @@
+{
+  "schema_version": "v1",
+  "name": "health_search",
+  "version": "0.2.0",
+  "description": "Search medical journals for user health questions.",
+  "mcp_endpoint": "stdio://local",  
+  "capabilities": ["chat"],
+  "author": "SaiNageswarS"
+}

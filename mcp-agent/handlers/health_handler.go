@@ -2,10 +2,8 @@ package handlers
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	pb "agent-boot/proto/generated"
 
@@ -41,6 +39,7 @@ func (s *HealthSearchHandler) Handle(ctx context.Context, req mcp.CallToolReques
 		return mcp.NewToolResultError("No queries provided"), nil
 	}
 
+	log.Printf("Received queries: %v", queries)
 	authToken := os.Getenv("SEARCH_CORE_AUTH_TOKEN")
 	if authToken == "" {
 		log.Println("SEARCH_CORE_AUTH_TOKEN environment variable is not set")
@@ -57,27 +56,5 @@ func (s *HealthSearchHandler) Handle(ctx context.Context, req mcp.CallToolReques
 		return mcp.NewToolResultError("Search request failed: " + err.Error()), nil
 	}
 
-	groundingData := formatResults(resp.Chunks)
-	return mcp.NewToolResultText(groundingData), nil
-}
-
-func formatResults(rs []*pb.Chunk) string {
-	if len(rs) == 0 {
-		return "No relevant journal articles found."
-	}
-
-	var b strings.Builder
-	// Main passages with footnote markers
-	for i, r := range rs {
-		footnote := fmt.Sprintf("[^%d]", i+1)
-		fmt.Fprintf(&b, "%s%s\n\n", r.Body, footnote)
-	}
-
-	// Sources section
-	b.WriteString("### Sources\n")
-	for i, r := range rs {
-		fmt.Fprintf(&b, "[^%d]: %s\n", i+1, r.Citation)
-	}
-
-	return b.String()
+	return mcp.NewToolResultText(resp.GroundingWithCitations), nil
 }

@@ -22,7 +22,7 @@ func main() {
 	// define tool for each agent-boot tenant.
 	healthTool := mcp.NewTool(
 		"health_search",
-		mcp.WithDescription("Accepts a health question or an array of refined queries and returns journal insights"),
+		mcp.WithDescription("Accepts a health question and an array of refined queries and returns journal insights"),
 		mcp.WithString("input", // free‑form question
 			mcp.Description("User's raw health question"),
 			mcp.Required(),

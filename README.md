@@ -21,18 +21,14 @@ Agent Boot is a production-ready platform that combines the best of Go's perform
 │   Claude + MCP  │───▶│   search-core    │───▶│   pySideCar     │
 │     Agent       │    │   (Go Backend)   │    │ (Python ML/NLP) │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
-        │                       │                       │
-        │                       ▼                       ▼
-        │              ┌─────────────────┐    ┌─────────────────┐
-        │              │   MongoDB       │    │  Temporal       │
-        │              │   (Vector DB)   │    │  (Workflows)    │
-        │              └─────────────────┘    └─────────────────┘
-        │                       │
-        ▼                       ▼
-┌─────────────────────────────────────────┐
-│         Azure Blob Storage              │
-│      (Documents & Chunks)              │
-└─────────────────────────────────────────┘
+                                │                       │
+                                ▼                       ▼
+                       ┌────────────────────────────────────────┐
+                       │            **go-api-boot**             │
+                       │(Bundled api-gRpc, ODM-Mongo (Search),  │
+                       │         Workers-Temporal, az blob)     │
+                       └────────────────────────────────────────┘
+
 ```
 
 ### 🎯 The Perfect Fusion
@@ -42,7 +38,7 @@ Agent Boot is a production-ready platform that combines the best of Go's perform
 - Temporal workers for orchestration
 - Vector & text search endpoints
 - Authentication & multi-tenancy
-- Powered by [go-api-boot](https://github.com/SaiNageswarS/go-api-boot) for elegant DI
+- Powered by [go-api-boot](https://github.com/SaiNageswarS/go-api-boot) 
 
 **Python ML Pipeline (`pySideCar`)**
 - PDF → Markdown conversion (pymupdf4llm)

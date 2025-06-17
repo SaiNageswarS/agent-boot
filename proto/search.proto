@@ -13,6 +13,16 @@ message SearchRequest {
 }
 
 message SearchResponse {
-    // The response has all the grounding data with citations. 
-    string groundingWithCitations = 1;
+    repeated SearchResult results = 1;
+    string status = 2;   // "success", "no_results", "partial_results"
+    repeated string searchQueries = 3;
+}
+
+message SearchResult {
+    int32 docIndex = 1;
+    string sectionPath = 2;
+    repeated string sentences = 3;
+    string source = 4;
+    string URL = 5;
+    string title = 6;
 }

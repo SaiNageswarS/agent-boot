@@ -15,10 +15,10 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/config"
 	"github.com/SaiNageswarS/go-api-boot/dotenv"
-	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-api-boot/server"
+	"github.com/ollama/ollama/api"
 	temporalClient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 )
@@ -35,14 +35,9 @@ func main() {
 	}
 
 	az := cloud.ProvideAzure(&ccfgg.BootConfig)
-	llmClient, err := llm.ProvideAnthropicClient()
+	llmClient, err := api.ClientFromEnvironment()
 	if err != nil {
-		logger.Fatal("Failed to create Anthropic client", zap.Error(err))
-	}
-
-	embeddingClient, err := llm.ProvideJinaAIEmbeddingClient()
-	if err != nil {
-		logger.Fatal("Failed to create Jina AI embedding client", zap.Error(err))
+		logger.Fatal("Failed to create Ollama client", zap.Error(err))
 	}
 
 	mongoClient, err := odm.GetClient()
@@ -56,14 +51,12 @@ func main() {
 		Provide(ccfgg).
 		Provide(az).
 		Provide(llmClient).
-		Provide(embeddingClient).
 		Provide(mongoClient).
 		// Add Workers
 		WithTemporal("search-core", &temporalClient.Options{
 			HostPort: ccfgg.TemporalHostPort,
 		}).
-		RegisterTemporalActivity(activities.ProvideIndexerActivities).
-		RegisterTemporalActivity(activities.ProvideInitTenantActivities).
+		RegisterTemporalActivity(activities.ProvideActivities).
 		RegisterTemporalWorkflow(workflows.IndexFileWorkflow).
 		RegisterTemporalWorkflow(workflows.InitTenantWorkflow).
 		// Register gRPC service impls

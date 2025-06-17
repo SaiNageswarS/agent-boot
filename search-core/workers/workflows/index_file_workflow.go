@@ -43,7 +43,7 @@ func IndexFileWorkflow(ctx workflow.Context, state IndexerWorkflowState) (Indexe
 
 	// chunk markdown
 	if len(state.MdSectionChunkUrls) == 0 && state.MarkdownFile != "" {
-		err := workflow.ExecuteActivity(ctx, (*activities.IndexerActivities).ChunkMarkdown, state.Tenant, sourceUri, state.MarkdownFile, sectionsOutputPath).Get(ctx, &state.MdSectionChunkUrls)
+		err := workflow.ExecuteActivity(ctx, (*activities.Activities).ChunkMarkdown, state.Tenant, sourceUri, state.MarkdownFile, sectionsOutputPath).Get(ctx, &state.MdSectionChunkUrls)
 		if err != nil {
 			return state, err
 		}
@@ -60,7 +60,7 @@ func IndexFileWorkflow(ctx workflow.Context, state IndexerWorkflowState) (Indexe
 
 	if len(state.WindowChunkUrls) > 0 {
 		// Embed and store each chunk
-		err := workflow.ExecuteActivity(ctx, (*activities.IndexerActivities).EmbedAndStoreChunk, state.Tenant, state.WindowChunkUrls).Get(ctx, nil)
+		err := workflow.ExecuteActivity(ctx, (*activities.Activities).EmbedAndStoreChunk, state.Tenant, state.WindowChunkUrls).Get(ctx, nil)
 		if err != nil {
 			return state, err
 		}

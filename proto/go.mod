@@ -1,8 +1,6 @@
 module agent-boot/proto
 
-go 1.23
-
-toolchain go1.23.9
+go 1.24.4
 
 require (
 	google.golang.org/grpc v1.72.2

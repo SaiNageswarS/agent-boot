@@ -1,18 +1,18 @@
-package utils
+package activities
 
 import (
 	"context"
 	"errors"
-	"slices"
+	"fmt"
 	"strings"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
-	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
 	"github.com/SaiNageswarS/go-collection-boot/linq"
+	"github.com/ollama/ollama/api"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -21,20 +21,37 @@ import (
 
 const minSectionBytes = 4000 // Minimum bytes for a section to be considered valid
 
-type MarkdownChunkerUtil struct {
-	llmClient *llm.AnthropicClient
-}
-
-func ProvideMarkdownChunkerUtil(llmClient *llm.AnthropicClient) *MarkdownChunkerUtil {
-	return &MarkdownChunkerUtil{
-		llmClient: llmClient,
+// ChunkMarkdown processes a markdown file, chunks it into sections, and uploads the chunks to Azure Blob Storage.
+// It returns the paths to the uploaded chunks JSON file. Each chunk is uploaded as a separate file in the specified {tenant}/{markdownFile} directory.
+func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markdownFile, sectionsOutputPath string) ([]string, error) {
+	markDownBytes, err := getBytes(s.az.DownloadFile(ctx, tenant, markdownFile))
+	if err != nil {
+		return []string{}, errors.New("failed to download PDF file: " + err.Error())
 	}
+
+	// Chunk the Markdown file
+	chunks, err := chunkMarkdownSections(ctx, s.ollamaClient, sourceUri, markDownBytes)
+	if err != nil {
+		return []string{}, errors.New("failed to chunk PDF file: " + err.Error())
+	}
+
+	// write combined sections to a single file for debugging purposes
+	combinedSectionsFile := fmt.Sprintf("%s/combined_sections.json", sectionsOutputPath)
+	writeToStorage(ctx, s.az, tenant, combinedSectionsFile, chunks)
+
+	var sectionChunkPaths []string
+	for _, chunk := range chunks {
+		chunkPath := fmt.Sprintf("%s/%s.chunk.json", sectionsOutputPath, chunk.ChunkID)
+		writeToStorage(ctx, s.az, tenant, chunkPath, chunk)
+		sectionChunkPaths = append(sectionChunkPaths, chunkPath)
+	}
+
+	return sectionChunkPaths, nil
 }
 
-// Chunks Markdown by sections.
-func (c *MarkdownChunkerUtil) ChunkMarkdownSections(ctx context.Context, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
+func chunkMarkdownSections(ctx context.Context, ollamaClient *api.Client, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
 	maxIntroBytes := min(2500, len(markdown)) // Limit intro snippet to 1000 bytes or less
-	titleResultChan := prompts.GenerateTitle(ctx, c.llmClient, string(markdown[0:maxIntroBytes]))
+	titleResultChan := prompts.GenerateTitle(ctx, ollamaClient, string(markdown[0:maxIntroBytes]))
 
 	sections, err := parseMarkdownSections(markdown, minSectionBytes)
 	if err != nil {
@@ -54,16 +71,14 @@ func (c *MarkdownChunkerUtil) ChunkMarkdownSections(ctx context.Context, sourceU
 	var out []db.ChunkModel
 	for idx, sec := range sections {
 		secHash, _ := odm.HashedKey(sec.body)
-		sec.path = slices.Insert(sec.path, 0, title) // Insert title at the beginning of the path
-		secPath := strings.Join(sec.path, " | ") + "\n\n"
 
 		secChunk := db.ChunkModel{
 			ChunkID:      secHash,
-			SectionPath:  secPath,
+			SectionPath:  strings.Join(sec.path, " | "),
 			SectionIndex: idx + 1, // 1-based index
-			PHIRemoved:   false,
+			Title:        title,
 			SourceURI:    sourceUri,
-			Body:         sec.body,
+			Sentences:    []string{sec.body},
 		}
 
 		out = append(out, secChunk)

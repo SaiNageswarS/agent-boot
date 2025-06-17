@@ -34,11 +34,9 @@ class WindowChunker:
         """
         result = []
 
-        max_window_text_len = 0
-
         # Split the body into sentences
-        logger.info(f"Processing section chunk: {section_chunk.chunkId} with {len(section_chunk.body)} characters.")
-        sentences = self.__split_sentences__(section_chunk.body)
+        logger.info(f"Processing section chunk: {section_chunk.chunkId} with {len(section_chunk.sentences[0])} characters.")
+        sentences = self.__split_sentences__(section_chunk.sentences[0])
         logger.info(f"Found {len(sentences)} sentences in section chunk: {section_chunk.chunkId}.")
         sent_tok_lens = [self.__count_tokens__(sent) for sent in sentences]
 
@@ -59,7 +57,7 @@ class WindowChunker:
                 tok_cnt = sent_tok_lens[start_sent]
                 end_sent = start_sent + 1
 
-            window_text = " ".join(sentences[start_sent:end_sent])
+            window_sentences = sentences[start_sent:end_sent]
 
             # Create a new Chunk object for the window
             result.append(
@@ -67,13 +65,12 @@ class WindowChunker:
                     chunkId=f"{section_chunk.chunkId}_{w_idx}",
                     sectionPath=section_chunk.sectionPath,
                     sectionIndex=section_chunk.sectionIndex,
-                    phiRemoved=section_chunk.phiRemoved,
+                    title=section_chunk.title,
                     sourceUri=section_chunk.sourceUri,
-                    body=window_text,
+                    sentences=window_sentences,
                 )
             )
 
-            max_window_text_len = max(max_window_text_len, len(window_text))
             w_idx += 1
 
             # Advance start_sent by ≈ stride tokens, but always land on a sentence boundary
@@ -91,7 +88,6 @@ class WindowChunker:
         
 
         logger.info(f"Created {len(result)} windowed chunks for {section_chunk.chunkId} section chunks.")
-        logger.info(f"Max window text length: {max_window_text_len} characters.")
 
         gc.collect()
         return result

@@ -53,12 +53,13 @@ func main() {
 		Provide(llmClient).
 		Provide(mongoClient).
 		// Add Workers
-		WithTemporal("search-core", &temporalClient.Options{
+		WithTemporal(ccfgg.TemporalGoTaskQueue, &temporalClient.Options{
 			HostPort: ccfgg.TemporalHostPort,
 		}).
 		RegisterTemporalActivity(activities.ProvideActivities).
-		RegisterTemporalWorkflow(workflows.IndexFileWorkflow).
+		RegisterTemporalWorkflow(workflows.ChunkMarkdownWorkflow).
 		RegisterTemporalWorkflow(workflows.InitTenantWorkflow).
+		RegisterTemporalWorkflow(workflows.PdfHandlerWorkflow).
 		// Register gRPC service impls
 		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
 		RegisterService(server.Adapt(pb.RegisterSearchServer), services.ProvideSearchService).

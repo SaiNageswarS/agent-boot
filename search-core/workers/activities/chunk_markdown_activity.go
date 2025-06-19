@@ -8,11 +8,11 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
 	"github.com/SaiNageswarS/go-collection-boot/linq"
-	"github.com/ollama/ollama/api"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -30,7 +30,7 @@ func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markd
 	}
 
 	// Chunk the Markdown file
-	chunks, err := chunkMarkdownSections(ctx, s.ollamaClient, sourceUri, markDownBytes)
+	chunks, err := chunkMarkdownSections(ctx, s.claude, sourceUri, markDownBytes)
 	if err != nil {
 		return []string{}, errors.New("failed to chunk PDF file: " + err.Error())
 	}
@@ -49,9 +49,9 @@ func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markd
 	return sectionChunkPaths, nil
 }
 
-func chunkMarkdownSections(ctx context.Context, ollamaClient *api.Client, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
+func chunkMarkdownSections(ctx context.Context, claude *llm.AnthropicClient, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
 	maxIntroBytes := min(2500, len(markdown)) // Limit intro snippet to 1000 bytes or less
-	titleResultChan := prompts.GenerateTitle(ctx, ollamaClient, string(markdown[0:maxIntroBytes]))
+	titleResultChan := prompts.GenerateTitle(ctx, claude, string(markdown[0:maxIntroBytes]))
 
 	sections, err := parseMarkdownSections(markdown, minSectionBytes)
 	if err != nil {
@@ -159,8 +159,7 @@ func parseMarkdownSections(md []byte, minBytes int) ([]markdownSection, error) {
 			prev.body += "\n\n" + s.body
 			// Append the current section's path to the previous section's path
 			prev.path = append(prev.path, s.path...)
-			prev.path = linq.From(prev.path).
-				Distinct().ToSlice()
+			prev.path = linq.Distinct(prev.path, func(a string) string { return a }) // Ensure unique paths
 		} else {
 			merged = append(merged, s)
 		}

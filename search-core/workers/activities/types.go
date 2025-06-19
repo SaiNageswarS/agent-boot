@@ -8,6 +8,7 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/ollama/ollama/api"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -15,13 +16,16 @@ import (
 )
 
 type Activities struct {
-	ccfg         *appconfig.AppConfig
-	az           *cloud.Azure
+	ccfg *appconfig.AppConfig
+	az   *cloud.Azure
+
 	ollamaClient *api.Client
-	mongo        *mongo.Client
+	claude       *llm.AnthropicClient
+
+	mongo *mongo.Client
 }
 
-func ProvideActivities(ccfg *appconfig.AppConfig, az *cloud.Azure, ollamaClient *api.Client, mongo *mongo.Client) *Activities {
+func ProvideActivities(ccfg *appconfig.AppConfig, az *cloud.Azure, ollamaClient *api.Client, claude *llm.AnthropicClient, mongo *mongo.Client) *Activities {
 	if err := az.EnsureBlob(context.Background()); err != nil {
 		logger.Fatal("Failed to ensure Azure Blob Client", zap.Error(err))
 	}
@@ -30,6 +34,7 @@ func ProvideActivities(ccfg *appconfig.AppConfig, az *cloud.Azure, ollamaClient 
 		ccfg:         ccfg,
 		az:           az,
 		ollamaClient: ollamaClient,
+		claude:       claude,
 		mongo:        mongo,
 	}
 }

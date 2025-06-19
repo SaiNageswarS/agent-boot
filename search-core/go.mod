@@ -4,7 +4,7 @@ go 1.24.4
 
 require (
 	github.com/SaiNageswarS/go-api-boot v1.0.24
-	github.com/SaiNageswarS/go-collection-boot v1.0.0
+	github.com/SaiNageswarS/go-collection-boot v1.0.3
 	github.com/ollama/ollama v0.9.1
 	github.com/yuin/goldmark v1.7.12
 	go.mongodb.org/mongo-driver/v2 v2.2.2

@@ -13,19 +13,14 @@ import (
 )
 
 // Useful to introduce new embedding models or change the existing one.
-func (s *Activities) GetChunksWithMissingEmbeddings(ctx context.Context, tenant, embeddingCol string) ([]string, error) {
-	// Find all chunks that do not have embeddings
-	if embeddingCol == "" {
-		embeddingCol = "embedding" // Default embedding column
+func (s *Activities) GetChunksWithMissingEmbeddings(ctx context.Context, tenant, sourceUri string) ([]string, error) {
+	if sourceUri == "" {
+		return nil, errors.New("sourceUri cannot be empty")
 	}
 
-	// find all chunks that do not have the embedding field set
+	// find all chunks belonging to the sourceUri.
 	filter := bson.M{
-		"$or": []bson.M{
-			{"embedding": bson.M{"$exists": false}},
-			{"embedding": nil},
-			{"embedding": bson.A{}},
-		},
+		"sourceUri": sourceUri,
 	}
 
 	chunkModels, err := async.Await(odm.CollectionOf[db.ChunkModel](s.mongo, tenant).Find(ctx, filter, nil, 0, 0))
@@ -57,9 +52,12 @@ func (s *Activities) EmbedChunks(ctx context.Context, tenant string, chunkIds []
 			return errors.New("failed to embed chunk: " + err.Error())
 		}
 
-		chunkModel.Embedding = bson.NewVector(embeddings)
+		chunkAnn := db.ChunkAnnModel{
+			ChunkID:   chunkModel.ChunkID,
+			Embedding: bson.NewVector(embeddings),
+		}
 
-		_, err = async.Await(odm.CollectionOf[db.ChunkModel](s.mongo, tenant).Save(ctx, *chunkModel))
+		_, err = async.Await(odm.CollectionOf[db.ChunkAnnModel](s.mongo, tenant).Save(ctx, chunkAnn))
 		if err != nil {
 			return errors.New("failed to save chunk to database: " + err.Error())
 		}

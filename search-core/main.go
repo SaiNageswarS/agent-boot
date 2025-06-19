@@ -15,6 +15,7 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/config"
 	"github.com/SaiNageswarS/go-api-boot/dotenv"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-api-boot/server"
@@ -35,7 +36,13 @@ func main() {
 	}
 
 	az := cloud.ProvideAzure(&ccfgg.BootConfig)
-	llmClient, err := api.ClientFromEnvironment()
+
+	claude, err := llm.ProvideAnthropicClient()
+	if err != nil {
+		logger.Fatal("Failed to create Claude client", zap.Error(err))
+	}
+
+	ollamaClient, err := api.ClientFromEnvironment()
 	if err != nil {
 		logger.Fatal("Failed to create Ollama client", zap.Error(err))
 	}
@@ -50,7 +57,8 @@ func main() {
 		HTTPPort(":8080").
 		Provide(ccfgg).
 		Provide(az).
-		Provide(llmClient).
+		Provide(ollamaClient).
+		Provide(claude).
 		Provide(mongoClient).
 		// Add Workers
 		WithTemporal(ccfgg.TemporalGoTaskQueue, &temporalClient.Options{

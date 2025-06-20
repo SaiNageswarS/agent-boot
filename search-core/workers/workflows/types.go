@@ -17,6 +17,6 @@ type PdfHandlerWorkflowInput struct {
 }
 
 type EmbedChunksWorkflowInput struct {
-	Tenant       string `json:"tenant"`
-	EmbeddingCol string `json:"embeddingCol"` // embedding column/field of ChunkModel collection
+	Tenant    string `json:"tenant"`
+	SourceUri string `json:"sourceUri"` // URI of the source file
 }

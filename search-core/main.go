@@ -68,6 +68,7 @@ func main() {
 		RegisterTemporalWorkflow(workflows.ChunkMarkdownWorkflow).
 		RegisterTemporalWorkflow(workflows.InitTenantWorkflow).
 		RegisterTemporalWorkflow(workflows.PdfHandlerWorkflow).
+		RegisterTemporalWorkflow(workflows.EmbedChunksWorkflow).
 		// Register gRPC service impls
 		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
 		RegisterService(server.Adapt(pb.RegisterSearchServer), services.ProvideSearchService).

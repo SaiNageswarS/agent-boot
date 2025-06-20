@@ -9,13 +9,13 @@ import (
 
 func EmbedChunksWorkflow(ctx workflow.Context, input EmbedChunksWorkflowInput) error {
 	activityOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: time.Minute * 10,
+		StartToCloseTimeout: time.Minute * 100,
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
 	// Find chunks missing embeddings
 	var missingChunkIds []string
-	err := workflow.ExecuteActivity(ctx, (*activities.Activities).GetChunksWithMissingEmbeddings, input.Tenant, input.EmbeddingCol).Get(ctx, &missingChunkIds)
+	err := workflow.ExecuteActivity(ctx, (*activities.Activities).GetChunksWithMissingEmbeddings, input.Tenant, input.SourceUri).Get(ctx, &missingChunkIds)
 	if err != nil {
 		return err
 	}

@@ -256,7 +256,7 @@ make test-integration
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please follow these steps:
 
 1. Fork the repository
 2. Create a feature branch
@@ -274,13 +274,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Temporal.io**: Workflow orchestration
 - **Anthropic**: Claude AI integration
 - **Jina AI**: Vector embeddings
-
-## 📞 Support
-
-- 📧 Email: support@agent-boot.dev
-- 💬 Discord: [Join our community](https://discord.gg/agent-boot)
-- 📚 Docs: [Full documentation](https://docs.agent-boot.dev)
-- 🐛 Issues: [GitHub Issues](https://github.com/your-org/agent-boot/issues)
 
 ---
 

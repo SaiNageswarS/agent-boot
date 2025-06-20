@@ -1,5 +1,11 @@
 package main
 
+/*
+This is a sample implmentation of a MCP client that uses agent-boot.
+While agent-boot is a multi-tenant framework, this example is a single-tenant.
+It is intended to demonstrate how to use agent-boot with MCP.
+*/
+
 import (
 	"agent-boot/mcp-agent/handlers"
 	"log"

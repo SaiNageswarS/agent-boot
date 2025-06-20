@@ -4,18 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net/http"
 	"os"
 
 	pb "agent-boot/proto/generated"
+	"agent-boot/proto/generated/generatedconnect"
 
+	"connectrpc.com/connect"
 	"github.com/mark3labs/mcp-go/mcp"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 )
 
 type HealthSearchHandler struct {
-	client pb.SearchClient
+	client generatedconnect.SearchClient
 }
 
 func ProvideHealthSearchHandler() *HealthSearchHandler {
@@ -24,12 +24,11 @@ func ProvideHealthSearchHandler() *HealthSearchHandler {
 		panic("SEARCH_CORE_URL environment variable is not set")
 	}
 
-	conn, err := grpc.NewClient(searchCoreUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		panic("Failed to connect to search core: " + err.Error())
-	}
+	client := generatedconnect.NewSearchClient(
+		http.DefaultClient,
+		searchCoreUrl,
+		connect.WithGRPCWeb())
 
-	client := pb.NewSearchClient(conn)
 	return &HealthSearchHandler{client: client}
 }
 
@@ -47,10 +46,12 @@ func (s *HealthSearchHandler) Handle(ctx context.Context, req mcp.CallToolReques
 		return mcp.NewToolResultError("SEARCH_CORE_AUTH_TOKEN environment variable is not set"), nil
 	}
 
-	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+authToken)
-	resp, err := s.client.Search(ctx, &pb.SearchRequest{
+	searchReq := connect.NewRequest(&pb.SearchRequest{
 		Queries: queries,
 	})
+	searchReq.Header().Set("Authorization", "Bearer "+authToken)
+
+	resp, err := s.client.Search(ctx, searchReq)
 
 	if err != nil {
 		log.Printf("Search request failed: %v", err)

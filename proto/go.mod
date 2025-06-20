@@ -3,6 +3,7 @@ module agent-boot/proto
 go 1.24.4
 
 require (
+	connectrpc.com/connect v1.18.1
 	google.golang.org/grpc v1.72.2
 	google.golang.org/protobuf v1.36.6
 )

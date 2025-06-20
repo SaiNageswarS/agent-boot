@@ -54,7 +54,7 @@ func main() {
 
 	boot, err := server.New().
 		GRPCPort(":50051"). // or ":0" for dynamic
-		HTTPPort(":8080").
+		HTTPPort(":8081").
 		Provide(ccfgg).
 		Provide(az).
 		Provide(ollamaClient).

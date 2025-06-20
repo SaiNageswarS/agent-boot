@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 async def main():
-    load_dotenv()
+    load_dotenv(override=True)
     run_mode = os.getenv("ENV", "dev").lower()
 
     config = configparser.ConfigParser()

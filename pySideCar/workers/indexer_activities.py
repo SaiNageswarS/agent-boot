@@ -6,7 +6,6 @@ from azure_storage import AzureStorage
 
 from workers.indexer_types import MEDICAL_ENTITIES, parse_section_chunk_file
 from workers.window_chunker import WindowChunker
-from workers.medical_entity_processor import MedicalEntityProcessor
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,7 +17,6 @@ class IndexerActivities:
         self._azure_storage = azure_storage
 
         self.window_chunker = WindowChunker()
-        self.medical_entity_processor = MedicalEntityProcessor()
 
     @activity.defn(name="convert_pdf_to_md")
     async def convert_pdf_to_md(self, tenant: str, pdf_file_name: str) -> str:
@@ -78,10 +76,6 @@ class IndexerActivities:
             
             # Process the sections into windowed chunks
             window_chunks = self.window_chunker.chunk_windows(md_section)
-
-            if enhacement == MEDICAL_ENTITIES:
-                logging.info("Applying medical entity enhancement to windowed chunks")
-                window_chunks = [self.medical_entity_processor.process_chunk(chunk) for chunk in window_chunks]
 
             for window_chunk in window_chunks:
                 window_chunk_json = json.dumps(asdict(window_chunk))

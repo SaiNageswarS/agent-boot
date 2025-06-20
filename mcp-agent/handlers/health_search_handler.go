@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"os"
 
@@ -56,5 +57,12 @@ func (s *HealthSearchHandler) Handle(ctx context.Context, req mcp.CallToolReques
 		return mcp.NewToolResultError("Search request failed: " + err.Error()), nil
 	}
 
-	return mcp.NewToolResultText(resp.GroundingWithCitations), nil
+	jsonResponse, err := json.Marshal(resp)
+	if err != nil {
+		log.Printf("Failed to marshal search response: %v", err)
+		return mcp.NewToolResultError("Failed to marshal search response: " + err.Error()), nil
+	}
+
+	log.Printf("Search response: %s", jsonResponse)
+	return mcp.NewToolResultText(string(jsonResponse)), nil
 }

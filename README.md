@@ -1,18 +1,24 @@
 # 🚀 Agent Boot
 
-**A high-performance, multi-language RAG system that supercharges Claude with domain-specific knowledge through intelligent document processing and semantic search.**
+**A production-ready, multi-language RAG system that supercharges Claude with domain-specific knowledge through intelligent document processing and semantic search.**
 
-Agent Boot is a production-ready platform that combines the best of Go's performance with Python's ML ecosystem, delivering a seamless AI-powered search experience through Claude's MCP (Model Context Protocol).
+Agent Boot combines the performance of Go with the AI capabilities of Python, delivering a seamless AI-powered search experience through Claude's MCP (Model Context Protocol). Built on the powerful [go-api-boot](https://github.com/SaiNageswarS/go-api-boot) framework for type-safe, enterprise-grade applications.
 
-## ✨ Features
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go)](https://golang.org/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python)](https://python.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Vector%20Search-47A248?style=for-the-badge&logo=mongodb)](https://mongodb.com/)
+[![Azure](https://img.shields.io/badge/Azure-Blob%20Storage-0078D4?style=for-the-badge&logo=microsoft-azure)](https://azure.microsoft.com/)
 
-- **🔥 Blazing Fast**: Go-powered backend with gRPC services for maximum performance
-- **🧠 Smart Processing**: Python-based ML pipeline for document understanding and entity extraction
-- **🔍 Hybrid Search**: Vector + text search with medical entity enhancement
-- **⚡ Real-time**: Temporal workflows for scalable document processing
-- **🌐 Multi-tenant**: Secure, isolated environments per tenant
-- **🤖 Claude Integration**: Native MCP agent for seamless AI interactions
-- **☁️ Cloud Native**: Azure Blob Storage + MongoDB with auto-scaling
+##  Features
+
+- **Blazing Fast**: Go-powered backend with gRPC services for maximum performance
+- **Smart Processing**: Python-based ML pipeline for document understanding and entity extraction
+- **Hybrid Search**: Vector + text search.
+- **Production Performance**: Temporal workflows for scalable document processing and fast search with Go's performance.
+- **Multi-tenant**: Secure, isolated environments per tenant
+- **Claude Integration**: Native MCP agent for seamless AI interactions
+- **Cloud Native**: Azure Blob Storage + MongoDB with auto-scaling
+- **Intelligent Query Processing**: Chain-of-thought reasoning extracts optimal search queries from natural language
 
 ## 🏗️ Architecture
 
@@ -35,27 +41,132 @@ Agent Boot is a production-ready platform that combines the best of Go's perform
 
 **Go Backend (`search-core`)**
 - High-performance gRPC services
-- Temporal workers for orchestration
+- Temporal workers for orchestration  
 - Vector & text search endpoints
 - Authentication & multi-tenancy
-- Powered by [go-api-boot](https://github.com/SaiNageswarS/go-api-boot) 
+- Powered by [go-api-boot](https://github.com/SaiNageswarS/go-api-boot)
 
 **Python ML Pipeline (`pySideCar`)**
 - PDF → Markdown conversion (pymupdf4llm)
-- Medical entity extraction (SciSpacy + UMLS)
 - Intelligent text chunking with sentence boundaries
 - Advanced windowing strategies
 
 **Claude MCP Agent (`mcp-agent`)**
-- Real-time health insights from journal articles
+- Real-time insights from document collections
 - Seamless integration with Claude Desktop
 - Context-aware query processing
+
+Since Agent Boot is developed with go-api-boot, it serves gRPC (HTTP/2) and gRPC-Web (HTTP/1.1) out of the box.
+
+## AI-Powered Intelligence
+
+### Chain-of-Thought Reasoning
+
+Agent Boot uses sophisticated prompting techniques for optimal results:
+
+#### From extract_agent_search_query_system.md
+**Chain of Thought Process:**
+
+1. **Relevance Check**: Does this question fall within the agent's capability domain?
+2. **Key Extraction**: What are the most important terms and concepts?
+3. **Information Needs**: What would I need to know to answer this comprehensively?
+4. **Search Strategy**: What queries would find the most relevant, authoritative information?
+5. **Diversity**: Do my queries cover different aspects without too much overlap?
+
+### Advanced Search Algorithm
+
+```go
+// From search_service.go - Hybrid scoring
+const (
+    vectorSearchWeight = 0.7
+    textSearchWeight   = 0.3
+    vecK  = 20  // Vector search results
+    textK = 20  // Text search results
+    maxChunks = 20
+)
+
+// Intelligent score combination
+for id, score := range textSearchChunkScoreMap {
+    combinedScores[id] = score * textSearchWeight
+}
+for id, score := range vecSearchChunkScoreMap {
+    combinedScores[id] += score * vectorSearchWeight
+}
+```
+
+### Multi-Tenant Architecture
+Agent Boot provides complete tenant isolation across all layers:
+
+#### Database Level
+```go
+// From auth interceptor - automatic tenant extraction
+_, tenant := auth.GetUserIdAndTenant(ctx)
+
+// Each tenant gets isolated collections
+chunkCollection := odm.CollectionOf[db.ChunkModel](s.mongo, tenant)
+```
+
+#### Storage Level
+```go
+// From activities - tenant-specific blob containers
+func (s *Activities) InitTenant(ctx context.Context, tenant string) error {
+    // Each tenant gets its own Azure Blob Container
+    if err := s.az.EnsureBucket(ctx, tenant); err != nil {
+        return err
+    }
+}
+```
+
+#### Processing Level
+```python
+# From pySideCar - tenant-aware document processing
+async def convert_pdf_to_md(self, tenant: str, pdf_file_name: str) -> str:
+    pdf_file_path = self._azure_storage.download_file(tenant, pdf_file_name)
+    # Process within tenant context
+```
+
+## Powered by go-api-boot
+Agent Boot leverages [https://github.com/SaiNageswarS/go-api-boot](SaiNageswarS/go-api-boot) for enterprise-grade development:
+
+### Type-Safe Development
+```go
+// from main.go
+// Automatic dependency injection with type safety
+boot, err := server.New().
+    GRPCPort(":50051").
+    HTTPPort(":8081").
+    Provide(ccfgg).                    // Config injection
+    Provide(az).                       // Azure client
+    Provide(claude).                   // LLM client
+    Provide(mongoClient).              // Database
+    // Temporal workflow registration
+    WithTemporal(ccfgg.TemporalGoTaskQueue, &temporalClient.Options{
+        HostPort: ccfgg.TemporalHostPort,
+    }).
+    RegisterTemporalActivity(activities.ProvideActivities).
+    RegisterTemporalWorkflow(workflows.ChunkMarkdownWorkflow).
+    // gRPC service registration
+    RegisterService(server.Adapt(pb.RegisterSearchServer), services.ProvideSearchService).
+    Build()
+```
+
+### Enterprise Features
+- Automatic gRPC/HTTP servers with middleware support
+- MongoDB ODM with vector search capabilities
+- Azure Cloud Integration for storage and secrets
+- JWT Authentication with tenant isolation
+- Temporal Workflows for reliable processing
+- Configuration Management with environment support
+- Structured Logging with correlation IDs
+
+### Developer Experience
+The entire application wiring happens in ~50 lines of clean, type-safe code. No configuration files, no dependency injection containers - just pure Go with compile-time safety.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Go 1.23+
+- Go 1.24+
 - Python 3.11+
 - MongoDB with Vector Search
 - Azure Blob Storage
@@ -194,29 +305,12 @@ STRIDE = 600          # Overlap between chunks
 MIN_SECTION_BYTES = 4000  # Minimum section size
 ```
 
-## 🏥 Medical AI Enhancement
-
-Agent Boot includes specialized medical AI capabilities:
-
-- **Entity Linking**: UMLS integration for medical concept recognition
-- **Section Intelligence**: Hierarchical document understanding  
-- **Confidence Filtering**: Only high-quality entity extractions (85%+ confidence)
-- **Abbreviation Handling**: Medical acronym resolution
-- **Citation Tracking**: Source attribution for all insights
-
 ## 🔒 Security & Multi-tenancy
 
 - **JWT Authentication**: Secure API access
 - **Tenant Isolation**: Complete data separation
 - **Azure Integration**: Enterprise-grade security
 - **Input Validation**: Comprehensive request sanitization
-
-## 📊 Performance
-
-- **Sub-second search**: Optimized vector operations
-- **Concurrent processing**: Temporal workflow orchestration
-- **Memory efficient**: Streaming document processing
-- **Auto-scaling**: Cloud-native architecture
 
 ## 🛠️ Development
 
@@ -270,10 +364,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - **[go-api-boot](https://github.com/SaiNageswarS/go-api-boot)**: The fantastic Go framework powering our backend
-- **SciSpacy**: Medical NLP capabilities
 - **Temporal.io**: Workflow orchestration
 - **Anthropic**: Claude AI integration
-- **Jina AI**: Vector embeddings
+- **Ollama**: Vector embeddings
 
 ---
 

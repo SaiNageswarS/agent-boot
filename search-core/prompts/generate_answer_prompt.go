@@ -26,7 +26,7 @@ func GenerateAnswer(ctx context.Context, client *llm.AnthropicClient, agentCapab
 
 		request := llm.AnthropicRequest{
 			Model:       "claude-3-5-sonnet-20241022",
-			MaxTokens:   4000,
+			MaxTokens:   8000,
 			System:      systemPrompt,
 			Temperature: 0.5,
 			Messages: []llm.Message{

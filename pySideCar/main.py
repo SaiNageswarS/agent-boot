@@ -10,15 +10,18 @@ from temporalio.worker import Worker
 from azure_storage import AzureStorage
 from workers.indexer_activities import IndexerActivities
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 async def main():
     load_dotenv(override=True)
     run_mode = os.getenv("ENV", "dev").lower()
 
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read("config.ini")
     env_config = dict(config[run_mode])
 
     azure_storage = AzureStorage(env_config)
@@ -31,12 +34,12 @@ async def main():
     worker = Worker(
         client,
         task_queue=env_config["temporal_py_task_queue"],
-        activities=[activities.convert_pdf_to_md,
-                    activities.window_section_chunks],
+        activities=[activities.convert_pdf_to_md, activities.window_section_chunks],
     )
 
     logger.info("🚀 Starting Temporal Worker...")
     await worker.run()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

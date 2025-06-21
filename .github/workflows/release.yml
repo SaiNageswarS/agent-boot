@@ -2,12 +2,11 @@ name: agent-boot-relase
 
 on:
   push:
-    branches: [ main ]  # Trigger on main branch pushes
     tags: ['v*'] 
   workflow_dispatch:
 
 jobs:
-  build-search-core:
+  build-go-binaries:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,28 +29,55 @@ jobs:
           echo "${HOME}/go/bin" >> $GITHUB_PATH
           echo "Path is ${GITHUB_PATH}"
 
-      - name: Build search-core 
+      - name: Build all components
         run: |
-          cd proto 
-          ./build.sh 
-          cd ..
-          cd search-core 
-          ./build.sh 
-          cd ..
-          cd mcp-agent 
-          ./build.sh 
-          cd ..
+          cd proto        && ./build.sh
+          cd ../search-core && ./build.sh
+          cd ../mcp-agent   && ./build.sh
+
+      - name: Move all binaries to ./release-bin
+        run: |
+          mkdir -p release-bin
+          mv search-core/build/* release-bin/
+          mv mcp-agent/build/* release-bin/
+          ls -lh release-bin
 
       - name: Upload Go artifacts
         uses: actions/upload-artifact@v4
         with:
           name: go-binaries
-          path: |
-            search-core/build/*
-            mcp-agent/build/*
+          path: release-bin/*
+
+  build-pySideCar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout API
+        uses: actions/checkout@v4
+
+      - name: Install Python dependencies
+        run: pip install -r pySideCar/requirements.txt
+
+      - name: Install pylint
+        run: pip install pylint
+
+      - name: Run pylint on pySideCar
+        run: pylint pySideCar --disable=missing-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,too-many-instance-attributes,logging-fstring-interpolation,trailing-whitespace
+
+      - name: Package Python Temporal worker (pySideCar)
+        run: |
+          mkdir -p release-bin
+          zip -r release-bin/pySideCar.zip pySideCar -x '*.pyc' '__pycache__/*'
+          ls -lh release-bin
+
+      - name: Upload Python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-binaries
+          path: release-bin/pySideCar.zip
 
   release:
-    needs: [build-search-core]
+    needs:  [build-go-binaries, build-pySideCar]
     runs-on: ubuntu-latest
 
     steps:
@@ -60,6 +86,17 @@ jobs:
       with:
         name: go-binaries
         path: ./artifacts
+
+    - name: Download Python artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: python-binaries
+        path: ./artifacts
+
+    - name: List downloaded artifacts
+      run: |
+        echo "Downloaded contents:"
+        find ./artifacts -type f -exec ls -lh {} \;
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
@@ -75,9 +112,4 @@ jobs:
           - `search-core` - Search Service
           - `mcp-agent` - Linux mcp Executable
           - `mcp-agent.exe` - Windows mcp Executable
-
-      
-
-
-      
-
+          - pySideCar.zip - Python Temporal Worker

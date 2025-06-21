@@ -5,8 +5,11 @@ from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 class AzureStorage:
     def __init__(self, config: dict[str, str]):
@@ -23,20 +26,24 @@ class AzureStorage:
             credential = DefaultAzureCredential()
             account_url = f"https://{account_name}.blob.core.windows.net"
             try:
-                self._blob_client = BlobServiceClient(account_url=account_url, credential=credential)
+                self._blob_client = BlobServiceClient(
+                    account_url=account_url, credential=credential
+                )
             except Exception as e:
                 logger.exception("Failed to create Azure Blob client")
                 raise RuntimeError("Blob client initialization failed") from e
 
         return self._blob_client
-    
+
     def download_file(self, container_name: str, blob_name: str) -> str:
         file_name = Path(blob_name).name
         temp_dir = tempfile.mkdtemp(prefix="azure_download_")
         tmp_file_path = Path(temp_dir).joinpath(file_name)
 
         try:
-            blob = self.blob_client.get_blob_client(container=container_name, blob=blob_name)
+            blob = self.blob_client.get_blob_client(
+                container=container_name, blob=blob_name
+            )
             with open(tmp_file_path, "wb") as f:
                 stream = blob.download_blob()
                 f.write(stream.readall())
@@ -46,10 +53,12 @@ class AzureStorage:
 
         logger.info("File downloaded successfully: %s", tmp_file_path)
         return str(tmp_file_path)
-    
+
     def upload_bytes(self, container_name: str, blob_name: str, data: bytes) -> str:
         try:
-            blob = self.blob_client.get_blob_client(container=container_name, blob=blob_name)
+            blob = self.blob_client.get_blob_client(
+                container=container_name, blob=blob_name
+            )
             blob.upload_blob(data, overwrite=True)
         except Exception as e:
             logger.exception(f"Failed to upload data to blob '{blob_name}'")

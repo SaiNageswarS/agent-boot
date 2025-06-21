@@ -1,30 +1,34 @@
 import logging
-import spacy, gc
+import gc
+import spacy
 import tiktoken
 from workers.indexer_types import Chunk
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 class WindowChunker:
     def __init__(self):
         self.nlp = spacy.load("en_core_web_sm", disable=["ner", "tagger", "lemmatizer"])
-        if "sentencizer" not in self.nlp.pipe_names:          # fail-safe
+        if "sentencizer" not in self.nlp.pipe_names:  # fail-safe
             self.nlp.add_pipe("sentencizer")
 
         self.nlp.max_length = 1_000_000  # Set a high limit for large texts
         self.encoding = tiktoken.get_encoding("cl100k_base")
 
-
-    def chunk_windows(self, section_chunk: Chunk, window_size: int = 700, stride: int = 600) -> list[Chunk]:
+    def chunk_windows(
+        self, section_chunk: Chunk, window_size: int = 700, stride: int = 600
+    ) -> list[Chunk]:
         """
         Splits a list of section chunks into smaller windows of 10 chunks each.
-        
+
         Args:
             section_chunks (list[Chunk]): List of section chunks to be split.
-            
+
         Returns:
             list[Chunk]: List of windowed chunks.
             • No sentence is ever split across windows.
@@ -35,23 +39,32 @@ class WindowChunker:
         result = []
 
         # Split the body into sentences
-        logger.info(f"Processing section chunk: {section_chunk.chunkId} with {len(section_chunk.sentences[0])} characters.")
+        logger.info(
+            "Processing section chunk: %s with %d characters.",
+            section_chunk.chunkId,
+            len(section_chunk.sentences[0])
+        )
+        
         sentences = self.__split_sentences__(section_chunk.sentences[0])
-        logger.info(f"Found {len(sentences)} sentences in section chunk: {section_chunk.chunkId}.")
+        logger.info(
+            f"Found {len(sentences)} sentences in section chunk: {section_chunk.chunkId}."
+        )
         sent_tok_lens = [self.__count_tokens__(sent) for sent in sentences]
 
         start_sent = 0
         w_idx = 0
-        
+
         while start_sent < len(sentences):
             tok_cnt, end_sent = 0, start_sent
 
             # Grow window until adding the next sentence would exceed the budget
-            while end_sent < len(sentences) and tok_cnt + sent_tok_lens[end_sent] <= window_size:
+            while (
+                end_sent < len(sentences)
+                and tok_cnt + sent_tok_lens[end_sent] <= window_size
+            ):
                 tok_cnt += sent_tok_lens[end_sent]
                 end_sent += 1
 
-        
             # Edge case: a *single* very long sentence
             if end_sent == start_sent:
                 tok_cnt = sent_tok_lens[start_sent]
@@ -85,32 +98,33 @@ class WindowChunker:
             # If stride is so large we emptied the window, move at least one sentence
             if start_sent == end_sent:
                 start_sent += 1
-        
 
-        logger.info(f"Created {len(result)} windowed chunks for {section_chunk.chunkId} section chunks.")
+        logger.info(
+            f"Created {len(result)} windowed chunks for {section_chunk.chunkId} section chunks."
+        )
 
         gc.collect()
         return result
-    
+
     def __count_tokens__(self, text: str) -> int:
         """
         Counts the number of tokens in a given text using the tiktoken encoding.
-        
+
         Args:
             text (str): The text to count tokens for.
-            
+
         Returns:
             int: The number of tokens in the text.
         """
         return len(self.encoding.encode(text)) if text else 0
-    
+
     def __split_sentences__(self, text: str) -> list[str]:
         """
         Splits a text into sentences using the spaCy sentencizer.
-        
+
         Args:
             text (str): The text to split into sentences.
-            
+
         Returns:
             list[str]: List of sentences.
         """
@@ -133,8 +147,10 @@ class WindowChunker:
                 # Last chunk, no need to check for next sentence
                 result.extend([sent.text.strip() for sent in chunk_sentences])
                 break
-            elif len(chunk_sentences) <= 1:
-                # If only one sentence, add it and move to next chunk. Otherwise, we might loop forever.
+            
+            if len(chunk_sentences) <= 1:
+                # If only one sentence, add it and move to next chunk. 
+                # Otherwise, we might loop forever.
                 result.append(chunk_sentences[0].text.strip())
                 pos = chunk_end
             else:
@@ -145,5 +161,5 @@ class WindowChunker:
                 last_sent = chunk_sentences[-1]
                 last_sent_start = last_sent.start_char  # Position within chunk
                 pos = pos + last_sent_start  # Absolute position in text
-        
+
         return result

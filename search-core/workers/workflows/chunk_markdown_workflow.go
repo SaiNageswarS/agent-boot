@@ -34,7 +34,7 @@ func ChunkMarkdownWorkflow(ctx workflow.Context, input ChunkMarkdownWorkflowInpu
 
 	// window sections.
 	var windowChunkUrls []string
-	err = workflow.ExecuteActivity(pyCtx, "window_section_chunks", input.Tenant, mdSectionUrls, input.Enhancement, windowsOutputPath).Get(ctx, &windowChunkUrls)
+	err = workflow.ExecuteActivity(pyCtx, "window_section_chunks", input.Tenant, mdSectionUrls, windowsOutputPath).Get(ctx, &windowChunkUrls)
 	if err != nil {
 		return err
 	}

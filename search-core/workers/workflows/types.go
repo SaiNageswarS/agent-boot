@@ -3,8 +3,7 @@ package workflows
 type ChunkMarkdownWorkflowInput struct {
 	MarkdownFile string `json:"markdownFile"` // Path to the markdown file
 	Tenant       string `json:"tenant"`
-	Enhancement  string `json:"enhancement"` // e.g., "medical_entities"
-	SourceUri    string `json:"sourceUri"`   // URI of the source file
+	SourceUri    string `json:"sourceUri"` // URI of the source file
 }
 
 type InitTenantWorkflowInput struct {

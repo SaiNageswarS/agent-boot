@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/mark3labs/mcp-go/mcp"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type HealthSearchHandler struct {
@@ -58,7 +58,11 @@ func (s *HealthSearchHandler) Handle(ctx context.Context, req mcp.CallToolReques
 		return mcp.NewToolResultError("Search request failed: " + err.Error()), nil
 	}
 
-	jsonResponse, err := json.Marshal(resp)
+	marshaler := protojson.MarshalOptions{
+		UseProtoNames:   true,  // Use field names from the .proto instead of lowerCamelCase
+		EmitUnpopulated: false, // Don't include fields with zero values
+	}
+	jsonResponse, err := marshaler.Marshal(resp.Msg)
 	if err != nil {
 		log.Printf("Failed to marshal search response: %v", err)
 		return mcp.NewToolResultError("Failed to marshal search response: " + err.Error()), nil

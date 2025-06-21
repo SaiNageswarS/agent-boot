@@ -23,5 +23,10 @@ func InitSearchCoreDB(ctx context.Context, mongo *mongo.Client, tenant string) e
 		return err
 	}
 
+	err = odm.EnsureIndexes[AgentModel](ctx, mongo, tenant)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

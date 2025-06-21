@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option go_package = "agent-boot/proto/generated";
 
-package login;
+package search;
 
 service Login {
     rpc Login(LoginRequest) returns (AuthResponse) {}

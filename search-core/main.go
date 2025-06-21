@@ -72,6 +72,7 @@ func main() {
 		// Register gRPC service impls
 		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
 		RegisterService(server.Adapt(pb.RegisterSearchServer), services.ProvideSearchService).
+		RegisterService(server.Adapt(pb.RegisterAgentServer), services.ProvideAgentService).
 		Build()
 
 	if err != nil {

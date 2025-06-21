@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+import "search.proto";
+
+option go_package = "agent-boot/proto/generated";
+
+package search;
+
+service Agent {
+    rpc CallAgent(AgentInput) returns (AgentResponse) {}
+}
+
+message AgentInput {
+    string text = 1;
+}
+
+message AgentResponse {
+    SearchRequest searchRequest = 1;
+    repeated SearchResult searchResults = 2;
+    string answer = 3;
+    string status = 4;    // "success", "no_results", "partial_results"
+}

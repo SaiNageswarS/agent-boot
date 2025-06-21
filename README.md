@@ -126,7 +126,7 @@ async def convert_pdf_to_md(self, tenant: str, pdf_file_name: str) -> str:
 ```
 
 ## Powered by go-api-boot
-Agent Boot leverages [https://github.com/SaiNageswarS/go-api-boot](SaiNageswarS/go-api-boot) for enterprise-grade development:
+Agent Boot leverages [SaiNageswarS/go-api-boot](https://github.com/SaiNageswarS/go-api-boot) for enterprise-grade development:
 
 ### Type-Safe Development
 ```go

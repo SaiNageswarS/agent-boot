@@ -2,8 +2,8 @@ package services
 
 import (
 	pb "agent-boot/proto/generated"
-	"context"
 	"fmt"
+	"time"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
@@ -16,8 +16,7 @@ import (
 	"github.com/ollama/ollama/api"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -36,45 +35,190 @@ func ProvideAgentService(mongo *mongo.Client, llmClient *llm.AnthropicClient, ol
 	}
 }
 
-func (s *AgentService) CallAgent(ctx context.Context, req *pb.AgentInput) (*pb.AgentResponse, error) {
+func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreamingServer[pb.AgentStreamChunk]) error {
+	ctx := stream.Context()
 	_, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Helper function to send error and return (since error chunks are final)
+	sendFinalError := func(message, code string) error {
+		return stream.Send(&pb.AgentStreamChunk{
+			ChunkType: &pb.AgentStreamChunk_Error{
+				Error: &pb.StreamError{
+					ErrorMessage: message,
+					ErrorCode:    code,
+				},
+			},
+		})
+	}
+
+	// Helper function to send metadata
+	sendMetadata := func(status string, estimatedQueries, estimatedResults int32) error {
+		return stream.Send(&pb.AgentStreamChunk{
+			ChunkType: &pb.AgentStreamChunk_Metadata{
+				Metadata: &pb.StreamMetadata{
+					Status:           status,
+					EstimatedQueries: estimatedQueries,
+					EstimatedResults: estimatedResults,
+				},
+			},
+		})
+	}
+
+	// Send initial metadata
+	if err := sendMetadata("starting", 0, 0); err != nil {
+		return err
+	}
 
 	// 1. Get Agent Details from DB.
 	defaultAgentName := "default-agent"
 	agentDetail, err := async.Await(odm.CollectionOf[db.AgentModel](s.mongo, tenant).FindOneByID(ctx, defaultAgentName))
 	if err != nil {
 		logger.Error("Error finding agent", zap.String("agent", defaultAgentName), zap.Error(err))
-		return nil, err
+		return sendFinalError("Failed to find agent configuration", "AGENT_NOT_FOUND")
 	}
 
 	if agentDetail == nil {
 		logger.Error("Agent not found", zap.String("agent", defaultAgentName))
-		return nil, status.Error(codes.NotFound, fmt.Sprintf("agent %s not found", defaultAgentName))
+		return sendFinalError(fmt.Sprintf("Agent %s not found", defaultAgentName), "AGENT_CONFIG_MISSING")
+	}
+
+	// Update metadata - agent found
+	if err := sendMetadata("processing_input", 0, 0); err != nil {
+		return err
 	}
 
 	// 2. Extract Agent Input using LLM.
 	agentInput, err := async.Await(prompts.ExtractAgentInput(ctx, s.llmClient, req.Text, agentDetail.Capability))
 	if err != nil {
 		logger.Error("Error extracting agent input", zap.Error(err))
-		return nil, status.Error(codes.Internal, "failed to extract agent input")
+		return sendFinalError("Failed to extract search queries from your input", "INPUT_EXTRACTION_FAILED")
 	}
 
 	if !agentInput.Relevant {
 		logger.Info("Agent input not relevant", zap.String("reasoning", agentInput.Reasoning))
-		return &pb.AgentResponse{Status: "not_relevant"}, nil
+
+		// Send completion
+		// Send answer explaining why it's not relevant
+		err = stream.Send(&pb.AgentStreamChunk{
+			ChunkType: &pb.AgentStreamChunk_Answer{
+				Answer: &pb.AnswerChunk{
+					Content: fmt.Sprintf("I'm not able to help with this request. %s", agentInput.Reasoning),
+					IsFinal: true,
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		// Send completion for not relevant
+		return stream.Send(&pb.AgentStreamChunk{
+			ChunkType: &pb.AgentStreamChunk_Complete{
+				Complete: &pb.StreamComplete{
+					FinalStatus:      "not_relevant",
+					TotalResultsSent: 0,
+					TotalQueriesSent: int32(len(agentInput.SearchQueries)),
+				},
+			},
+		})
 	}
 
 	logger.Info("Agent input is relevant", zap.String("reasoning", agentInput.Reasoning))
 
-	// 3. Perform Search using Search Service based on extracted queries of the agent input.
-	searchResults, err := s.searchService.Search(ctx, &pb.SearchRequest{Queries: agentInput.SearchQueries})
-
+	// Send search queries
+	err = stream.Send(&pb.AgentStreamChunk{
+		ChunkType: &pb.AgentStreamChunk_SearchRequest{
+			SearchRequest: &pb.SearchRequestChunk{
+				Queries:      agentInput.SearchQueries,
+				ChunkIndex:   0,
+				IsFinalChunk: true,
+			},
+		},
+	})
 	if err != nil {
-		logger.Error("Error performing search", zap.Error(err))
-		return nil, err
+		return err
 	}
 
+	// 3. Perform Search using Search Service based on extracted queries of the agent input.
+	// Update metadata - starting search
+	if err := sendMetadata("searching", int32(len(agentInput.SearchQueries)), 0); err != nil {
+		return err
+	}
+
+	searchResults, err := s.searchService.Search(ctx, &pb.SearchRequest{Queries: agentInput.SearchQueries})
+	if err != nil {
+		logger.Error("Error performing search", zap.Error(err))
+		return sendFinalError("Search service failed to process your query", "SEARCH_FAILED")
+	}
+
+	totalResults := len(searchResults.Results)
+
+	// Update metadata with actual results count
+	if err := sendMetadata("processing_results", int32(len(agentInput.SearchQueries)), int32(totalResults)); err != nil {
+		return err
+	}
+
+	const chunkSize = 10
+	// send search results
+	sendSearchResultsTask := async.Go(func() (struct{}, error) {
+		// Send empty chunk if no results
+		if totalResults == 0 {
+			return struct{}{}, stream.Send(&pb.AgentStreamChunk{
+				ChunkType: &pb.AgentStreamChunk_SearchResults{
+					SearchResults: &pb.SearchResultsChunk{
+						Results:      []*pb.SearchResult{},
+						ChunkIndex:   0,
+						TotalChunks:  1,
+						IsFinalChunk: true,
+					},
+				},
+			})
+		}
+
+		totalChunks := (totalResults + chunkSize - 1) / chunkSize
+
+		// Send results in chunks
+		for i := 0; i < totalResults; i += chunkSize {
+			// Check if context is cancelled
+			if ctx.Err() != nil {
+				return struct{}{}, ctx.Err()
+			}
+
+			end := min(i+chunkSize, totalResults)
+
+			chunk := searchResults.Results[i:end]
+			chunkIndex := i / chunkSize
+			isLast := end >= totalResults
+
+			err = stream.Send(&pb.AgentStreamChunk{
+				ChunkType: &pb.AgentStreamChunk_SearchResults{
+					SearchResults: &pb.SearchResultsChunk{
+						Results:      chunk,
+						ChunkIndex:   int32(chunkIndex),
+						TotalChunks:  int32(totalChunks),
+						IsFinalChunk: isLast,
+					},
+				},
+			})
+			if err != nil {
+				return struct{}{}, err
+			}
+
+			// Small delay to prevent overwhelming the client
+			if !isLast {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+
+		return struct{}{}, nil
+	})
+
 	// 4. Generate Answer using LLM based on search results and agent input.
+	// Update metadata - generating answer
+	if err := sendMetadata("generating_answer", int32(len(agentInput.SearchQueries)), int32(totalResults)); err != nil {
+		return err
+	}
+
 	marshaler := protojson.MarshalOptions{
 		UseProtoNames:   true,  // Use field names from the .proto instead of lowerCamelCase
 		EmitUnpopulated: false, // Don't include fields with zero values
@@ -83,21 +227,56 @@ func (s *AgentService) CallAgent(ctx context.Context, req *pb.AgentInput) (*pb.A
 	searchResultsJson, err := marshaler.Marshal(searchResults)
 	if err != nil {
 		logger.Error("Error marshaling search results", zap.Error(err))
-		return nil, status.Error(codes.Internal, "failed to marshal search results")
+		// Wait for search results to finish sending before sending error
+		async.Await(sendSearchResultsTask)
+		return sendFinalError("Failed to process search results for answer generation", "MARSHAL_FAILED")
 	}
 
-	answer, err := async.Await(prompts.GenerateAnswer(ctx, s.llmClient, agentDetail.Capability, req.Text, string(searchResultsJson)))
-	if err != nil {
-		logger.Error("Error generating answer", zap.Error(err))
-		return nil, status.Error(codes.Internal, "failed to generate answer")
+	answerTask := async.Go(func() (string, error) {
+		return async.Await(prompts.GenerateAnswer(ctx, s.llmClient, agentDetail.Capability, req.Text, string(searchResultsJson)))
+	})
+
+	// Wait for search results to finish sending
+	_, searchErr := async.Await(sendSearchResultsTask)
+	if searchErr != nil {
+		logger.Error("Error sending search results", zap.Error(searchErr))
+		return searchErr
 	}
 
-	return &pb.AgentResponse{
-		Status:        "success",
-		Answer:        answer,
-		SearchResults: searchResults.Results,
-		SearchRequest: &pb.SearchRequest{
-			Queries: agentInput.SearchQueries,
+	// Wait for answer generation
+	answer, answerErr := async.Await(answerTask)
+	if answerErr != nil {
+		logger.Error("Error generating answer", zap.Error(answerErr))
+		return sendFinalError("Failed to generate answer, but search results are available above", "ANSWER_GENERATION_FAILED")
+	}
+
+	// Send answer
+	err = stream.Send(&pb.AgentStreamChunk{
+		ChunkType: &pb.AgentStreamChunk_Answer{
+			Answer: &pb.AnswerChunk{
+				Content: answer,
+				IsFinal: true,
+			},
 		},
-	}, nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Send final completion
+	err = stream.Send(&pb.AgentStreamChunk{
+		ChunkType: &pb.AgentStreamChunk_Complete{
+			Complete: &pb.StreamComplete{
+				FinalStatus:      "success",
+				TotalResultsSent: int32(totalResults),
+				TotalQueriesSent: int32(len(agentInput.SearchQueries)),
+			},
+		},
+	})
+
+	logger.Info("Agent streaming completed successfully",
+		zap.Int("total_results", totalResults),
+		zap.Int("total_queries", len(agentInput.SearchQueries)))
+
+	return err
 }

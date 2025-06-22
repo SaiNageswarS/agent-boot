@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	pb "agent-boot/proto/generated"
 
@@ -22,6 +23,8 @@ import (
 	"github.com/ollama/ollama/api"
 	temporalClient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
 
 func main() {
@@ -70,6 +73,7 @@ func main() {
 		RegisterTemporalWorkflow(workflows.PdfHandlerWorkflow).
 		RegisterTemporalWorkflow(workflows.EmbedChunksWorkflow).
 		// Register gRPC service impls
+		ApplySettings(getStreamingOptimizations()).
 		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).
 		RegisterService(server.Adapt(pb.RegisterSearchServer), services.ProvideSearchService).
 		RegisterService(server.Adapt(pb.RegisterAgentServer), services.ProvideAgentService).
@@ -96,4 +100,25 @@ func getCancellableContext() context.Context {
 	}()
 
 	return ctx
+}
+
+func getStreamingOptimizations() []grpc.ServerOption {
+	return []grpc.ServerOption{
+		// Increase message size limits for large responses
+		grpc.MaxRecvMsgSize(20 * 1024 * 1024), // 20MB
+		grpc.MaxSendMsgSize(20 * 1024 * 1024), // 20MB
+
+		// Configure keepalive for streaming connections
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle:     30 * time.Second, // Close idle connections after 30s
+			MaxConnectionAge:      5 * time.Minute,  // Close connections after 5 minutes
+			MaxConnectionAgeGrace: 10 * time.Second, // Grace period for closing
+			Time:                  30 * time.Second, // Send pings every 30s
+			Timeout:               5 * time.Second,  // Ping timeout
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             10 * time.Second, // Minimum time between pings
+			PermitWithoutStream: true,             // Allow pings without active streams
+		}),
+	}
 }

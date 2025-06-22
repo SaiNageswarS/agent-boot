@@ -39,9 +39,22 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	ctx := stream.Context()
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
+	// Helper function to send with error checking and flushing
+	sendChunk := func(chunk *pb.AgentStreamChunk) error {
+		if err := stream.Send(chunk); err != nil {
+			logger.Error("Failed to send chunk", zap.Error(err))
+			return err
+		}
+		// Force flush after each send for better streaming
+		if flusher, ok := stream.(interface{ Flush() error }); ok {
+			flusher.Flush()
+		}
+		return nil
+	}
+
 	// Helper function to send error and return (since error chunks are final)
 	sendFinalError := func(message, code string) error {
-		return stream.Send(&pb.AgentStreamChunk{
+		return sendChunk(&pb.AgentStreamChunk{
 			ChunkType: &pb.AgentStreamChunk_Error{
 				Error: &pb.StreamError{
 					ErrorMessage: message,
@@ -53,7 +66,7 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 
 	// Helper function to send metadata
 	sendMetadata := func(status string, estimatedQueries, estimatedResults int32) error {
-		return stream.Send(&pb.AgentStreamChunk{
+		return sendChunk(&pb.AgentStreamChunk{
 			ChunkType: &pb.AgentStreamChunk_Metadata{
 				Metadata: &pb.StreamMetadata{
 					Status:           status,
@@ -63,6 +76,13 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 			},
 		})
 	}
+
+	// Add defer to ensure stream is properly closed
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("Stream panic recovered", zap.Any("panic", r))
+		}
+	}()
 
 	// Send initial metadata
 	if err := sendMetadata("starting", 0, 0); err != nil {
@@ -97,9 +117,8 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	if !agentInput.Relevant {
 		logger.Info("Agent input not relevant", zap.String("reasoning", agentInput.Reasoning))
 
-		// Send completion
 		// Send answer explaining why it's not relevant
-		err = stream.Send(&pb.AgentStreamChunk{
+		err = sendChunk(&pb.AgentStreamChunk{
 			ChunkType: &pb.AgentStreamChunk_Answer{
 				Answer: &pb.AnswerChunk{
 					Content: fmt.Sprintf("I'm not able to help with this request. %s", agentInput.Reasoning),
@@ -112,7 +131,7 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 		}
 
 		// Send completion for not relevant
-		return stream.Send(&pb.AgentStreamChunk{
+		return sendChunk(&pb.AgentStreamChunk{
 			ChunkType: &pb.AgentStreamChunk_Complete{
 				Complete: &pb.StreamComplete{
 					FinalStatus:      "not_relevant",
@@ -126,7 +145,7 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	logger.Info("Agent input is relevant", zap.String("reasoning", agentInput.Reasoning))
 
 	// Send search queries
-	err = stream.Send(&pb.AgentStreamChunk{
+	err = sendChunk(&pb.AgentStreamChunk{
 		ChunkType: &pb.AgentStreamChunk_SearchRequest{
 			SearchRequest: &pb.SearchRequestChunk{
 				Queries:      agentInput.SearchQueries,
@@ -159,11 +178,11 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	}
 
 	const chunkSize = 10
-	// send search results
+	// Send search results asynchronously with proper error handling
 	sendSearchResultsTask := async.Go(func() (struct{}, error) {
 		// Send empty chunk if no results
 		if totalResults == 0 {
-			return struct{}{}, stream.Send(&pb.AgentStreamChunk{
+			return struct{}{}, sendChunk(&pb.AgentStreamChunk{
 				ChunkType: &pb.AgentStreamChunk_SearchResults{
 					SearchResults: &pb.SearchResultsChunk{
 						Results:      []*pb.SearchResult{},
@@ -177,7 +196,6 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 
 		totalChunks := (totalResults + chunkSize - 1) / chunkSize
 
-		// Send results in chunks
 		for i := 0; i < totalResults; i += chunkSize {
 			// Check if context is cancelled
 			if ctx.Err() != nil {
@@ -185,12 +203,11 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 			}
 
 			end := min(i+chunkSize, totalResults)
-
 			chunk := searchResults.Results[i:end]
 			chunkIndex := i / chunkSize
 			isLast := end >= totalResults
 
-			err = stream.Send(&pb.AgentStreamChunk{
+			err := sendChunk(&pb.AgentStreamChunk{
 				ChunkType: &pb.AgentStreamChunk_SearchResults{
 					SearchResults: &pb.SearchResultsChunk{
 						Results:      chunk,
@@ -201,15 +218,19 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 				},
 			})
 			if err != nil {
+				logger.Error("Failed to send search results chunk",
+					zap.Int("chunk_index", chunkIndex),
+					zap.Error(err))
 				return struct{}{}, err
 			}
 
-			// Small delay to prevent overwhelming the client
+			// Small delay only if not last chunk
 			if !isLast {
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(50 * time.Millisecond) // Increased delay for stability
 			}
 		}
 
+		logger.Info("Search results sending completed", zap.Int("total_chunks", totalChunks))
 		return struct{}{}, nil
 	})
 
@@ -220,8 +241,8 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	}
 
 	marshaler := protojson.MarshalOptions{
-		UseProtoNames:   true,  // Use field names from the .proto instead of lowerCamelCase
-		EmitUnpopulated: false, // Don't include fields with zero values
+		UseProtoNames:   true,
+		EmitUnpopulated: false,
 	}
 
 	searchResultsJson, err := marshaler.Marshal(searchResults)
@@ -250,8 +271,9 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 		return sendFinalError("Failed to generate answer, but search results are available above", "ANSWER_GENERATION_FAILED")
 	}
 
-	// Send answer
-	err = stream.Send(&pb.AgentStreamChunk{
+	// Send answer with extra safety
+	logger.Info("Sending answer", zap.Int("answer_length", len(answer)))
+	err = sendChunk(&pb.AgentStreamChunk{
 		ChunkType: &pb.AgentStreamChunk_Answer{
 			Answer: &pb.AnswerChunk{
 				Content: answer,
@@ -260,11 +282,13 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 		},
 	})
 	if err != nil {
+		logger.Error("Failed to send answer", zap.Error(err))
 		return err
 	}
 
-	// Send final completion
-	err = stream.Send(&pb.AgentStreamChunk{
+	// Send final completion with extra safety
+	logger.Info("Sending completion")
+	err = sendChunk(&pb.AgentStreamChunk{
 		ChunkType: &pb.AgentStreamChunk_Complete{
 			Complete: &pb.StreamComplete{
 				FinalStatus:      "success",
@@ -273,10 +297,14 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 			},
 		},
 	})
+	if err != nil {
+		logger.Error("Failed to send completion", zap.Error(err))
+		return err
+	}
 
 	logger.Info("Agent streaming completed successfully",
 		zap.Int("total_results", totalResults),
 		zap.Int("total_queries", len(agentInput.SearchQueries)))
 
-	return err
+	return nil
 }

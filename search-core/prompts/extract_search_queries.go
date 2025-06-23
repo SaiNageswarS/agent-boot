@@ -10,14 +10,14 @@ import (
 	"go.uber.org/zap"
 )
 
-type ExtractAgentInputResponse struct {
+type ExtractSearchQueriesResponse struct {
 	Relevant      bool     `json:"relevant"`
 	Reasoning     string   `json:"reasoning"`
 	SearchQueries []string `json:"search_queries"`
 }
 
-func ExtractAgentInput(ctx context.Context, client *llm.AnthropicClient, userInput, agentCapability string) <-chan async.Result[*ExtractAgentInputResponse] {
-	return async.Go(func() (*ExtractAgentInputResponse, error) {
+func ExtractSearchQueries(ctx context.Context, client *llm.AnthropicClient, userInput, agentCapability string) <-chan async.Result[*ExtractSearchQueriesResponse] {
+	return async.Go(func() (*ExtractSearchQueriesResponse, error) {
 		systemPrompt, err := loadPrompt("templates/extract_agent_search_query_system.md", map[string]string{})
 		if err != nil {
 			logger.Error("Failed to load system prompt", zap.Error(err))
@@ -53,7 +53,7 @@ func ExtractAgentInput(ctx context.Context, client *llm.AnthropicClient, userInp
 
 		logger.Info("ExtractAgentInput response", zap.String("response", response))
 
-		out := &ExtractAgentInputResponse{}
+		out := &ExtractSearchQueriesResponse{}
 		json.Unmarshal([]byte(response), out)
 
 		return out, nil

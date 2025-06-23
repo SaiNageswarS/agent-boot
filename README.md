@@ -14,6 +14,7 @@ Agent Boot combines the performance of Go with the AI capabilities of Python, de
 - **Blazing Fast**: Go-powered backend with gRPC services for maximum performance
 - **Smart Processing**: Python-based ML pipeline for document understanding and entity extraction
 - **Hybrid Search**: Vector + text search.
+- **Real-time Streaming**: Live search results and AI responses through gRPC streaming
 - **Production Performance**: Temporal workflows for scalable document processing and fast search with Go's performance.
 - **Multi-tenant**: Secure, isolated environments per tenant
 - **Claude Integration**: Native MCP agent for seamless AI interactions
@@ -57,6 +58,74 @@ Agent Boot combines the performance of Go with the AI capabilities of Python, de
 - Context-aware query processing
 
 Since Agent Boot is developed with go-api-boot, it serves gRPC (HTTP/2) and gRPC-Web (HTTP/1.1) out of the box.
+
+## Real-time Streaming with go-api-boot
+### Live AI Agent Responses
+![Agent Boot Streaming Demo](agent_boot_demo.gif)
+
+Agent Boot delivers real-time streaming responses through go-api-boot's gRPC infrastructure. Watch as your queries are processed live:
+
+- Query Processing → Instant feedback
+- Search Execution → Live search results streaming
+- AI Analysis → Real-time answer generation
+- Complete Response → Fully cited, intelligent answers
+
+### Streaming Architecture Deep Dive
+
+```go
+// agent_service.go
+
+func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreamingServer[pb.AgentStreamChunk]) error {
+    // Helper function with automatic flushing
+    sendChunk := func(chunk *pb.AgentStreamChunk) error {
+        if err := stream.Send(chunk); err != nil {
+            return err
+        }
+        // Force flush for real-time streaming
+        if flusher, ok := stream.(interface{ Flush() error }); ok {
+            flusher.Flush()
+        }
+        return nil
+    }
+
+    // Stream metadata updates
+    sendMetadata("processing_input", 0, 0)
+    
+    // Stream search queries as they're generated
+    sendChunk(&pb.AgentStreamChunk{
+        ChunkType: &pb.AgentStreamChunk_SearchRequest{
+            SearchRequest: &pb.SearchRequestChunk{
+                Queries: agentInput.SearchQueries,
+            },
+        },
+    })
+
+    // Stream search results in real-time chunks
+    for i := 0; i < totalResults; i += chunkSize {
+        chunk := searchResults.Results[i:end]
+        sendChunk(&pb.AgentStreamChunk{
+            ChunkType: &pb.AgentStreamChunk_SearchResults{
+                SearchResults: &pb.SearchResultsChunk{
+                    Results: chunk,
+                    ChunkIndex: int32(chunkIndex),
+                },
+            },
+        })
+    }
+
+    // Stream final AI-generated answer
+    sendChunk(&pb.AgentStreamChunk{
+        ChunkType: &pb.AgentStreamChunk_Answer{
+            Answer: &pb.AnswerChunk{
+                Content: answer,
+                IsFinal: true,
+            },
+        },
+    })
+}
+```
+
+Since Agent Boot is built with go-api-boot, it serves both gRPC (HTTP/2) and gRPC-Web (HTTP/1.1) out of the box, enabling streaming from web browsers and native applications.
 
 ## AI-Powered Intelligence
 

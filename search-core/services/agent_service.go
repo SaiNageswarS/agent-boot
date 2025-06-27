@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
 	"github.com/SaiNageswarS/go-api-boot/auth"
@@ -28,11 +27,11 @@ type AgentService struct {
 	searchService *SearchService
 }
 
-func ProvideAgentService(mongo *mongo.Client, llmClient *llm.AnthropicClient, ollamaClient *api.Client, ccfgg *appconfig.AppConfig) *AgentService {
+func ProvideAgentService(mongo *mongo.Client, llmClient *llm.AnthropicClient, ollamaClient *api.Client) *AgentService {
 	return &AgentService{
 		mongo:         mongo,
 		llmClient:     llmClient,
-		searchService: ProvideSearchService(mongo, ollamaClient, ccfgg),
+		searchService: ProvideSearchService(mongo, ollamaClient),
 	}
 }
 

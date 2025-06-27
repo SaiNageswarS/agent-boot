@@ -6,6 +6,9 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+const VectorIndexName = "chunkEmbeddingIndex"
+const VectorPath = "embedding"
+
 type ChunkAnnModel struct {
 	ChunkID   string      `json:"chunkId" bson:"_id"` // Unique
 	Embedding bson.Vector `json:"-" bson:"embedding"` // Embedding vector for the chunk, not serialized in JSON
@@ -19,8 +22,8 @@ func (m ChunkAnnModel) CollectionName() string { return "chunk_ann_index" }
 func (m ChunkAnnModel) VectorIndexSpecs() []odm.VectorIndexSpec {
 	return []odm.VectorIndexSpec{
 		{
-			Name:          "chunkEmbeddingIndex",
-			Path:          "embedding",
+			Name:          VectorIndexName,
+			Path:          VectorPath,
 			Type:          "vector",
 			NumDimensions: prompts.EmbeddingDimensions,
 			Similarity:    "cosine",

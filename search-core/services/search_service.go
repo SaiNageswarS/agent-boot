@@ -5,7 +5,6 @@ import (
 	"context"
 	"slices"
 
-	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
 	"github.com/SaiNageswarS/go-api-boot/auth"
@@ -24,32 +23,24 @@ import (
 
 // search parameters.
 const (
-	vectorSearchWeight = 0.7
-	textSearchWeight   = 0.3
-
-	vecK  = 20 // Number of vector search results to return
-	textK = 20 // Number of text search results to return
-
-	textSearchIndexName   = "chunkIndex"
-	vectorSearchIndexName = "chunkEmbeddingIndex"
-
-	vectorSearchFieldName = "embedding" //chunkAnnModel can have multiple vector fields, but we use only one for search
-
-	maxChunks = 20
+	rrfK               = 60  // “dampening” constant from the RRF paper
+	textSearchWeight   = 1.0 // optional per-engine weights
+	vectorSearchWeight = 1.0
+	vecK               = 20 // # of hits to keep from each engine
+	textK              = 20
+	maxChunks          = 20
 )
 
 type SearchService struct {
 	pb.UnimplementedSearchServer
 	mongo        *mongo.Client
 	ollamaClient *api.Client
-	ccfgg        *appconfig.AppConfig
 }
 
-func ProvideSearchService(mongo *mongo.Client, ollamaClient *api.Client, ccfgg *appconfig.AppConfig) *SearchService {
+func ProvideSearchService(mongo *mongo.Client, ollamaClient *api.Client) *SearchService {
 	return &SearchService{
 		mongo:        mongo,
 		ollamaClient: ollamaClient,
-		ccfgg:        ccfgg,
 	}
 }
 
@@ -94,12 +85,17 @@ func (s *SearchService) Search(ctx context.Context, req *pb.SearchRequest) (*pb.
 	return buildSearchResponse(rankedChunks), nil
 }
 
-func (s *SearchService) hybridSearch(ctx context.Context, tenant, query string) <-chan async.Result[[]*db.ChunkModel] {
+func (s *SearchService) hybridSearch(ctx context.Context,
+	tenant, query string) <-chan async.Result[[]*db.ChunkModel] {
+
 	return async.Go(func() ([]*db.ChunkModel, error) {
-		textSerchTask := odm.CollectionOf[db.ChunkModel](s.mongo, tenant).
+		//----------------------------------------------------------------------
+		// 1. Fire the two independent searches in parallel
+		//----------------------------------------------------------------------
+		textTask := odm.CollectionOf[db.ChunkModel](s.mongo, tenant).
 			TermSearch(ctx, query, odm.TermSearchParams{
-				IndexName: textSearchIndexName,
-				Path:      []string{"sentences", "sectionPath", "tags", "title"},
+				IndexName: db.TextSearchIndexName,
+				Path:      db.TextSearchPaths,
 				Limit:     textK,
 			})
 
@@ -108,68 +104,107 @@ func (s *SearchService) hybridSearch(ctx context.Context, tenant, query string) 
 			return nil, status.Errorf(codes.Internal, "embed: %v", err)
 		}
 
-		vecSearchTask := odm.CollectionOf[db.ChunkAnnModel](s.mongo, tenant).
+		vecTask := odm.CollectionOf[db.ChunkAnnModel](s.mongo, tenant).
 			VectorSearch(ctx, emb, odm.VectorSearchParams{
-				IndexName:     vectorSearchIndexName,
-				Path:          vectorSearchFieldName,
+				IndexName:     db.VectorIndexName,
+				Path:          db.VectorPath,
 				K:             vecK,
 				NumCandidates: 100,
 			})
 
-		textSearchChunkScoreMap, chunkCache, err := collectTextSearchHitTasks(textSerchTask)
+		//----------------------------------------------------------------------
+		// 2. Convert each result list → id→rank    (rank ∈ {1,2,…})
+		//----------------------------------------------------------------------
+		textRanks, cache, err := collectTextSearchRanks(textTask)
 		if err != nil {
-			logger.Error("Failed to perform text search", zap.Error(err))
+			logger.Error("text search failed", zap.Error(err))
 		}
 
-		logger.Info("Text Search Results", zap.String("query", query), zap.Any("textSearchChunkScoreMap", textSearchChunkScoreMap))
-
-		vecSearchChunkScoreMap, err := collectVectorSearchHitTasks(vecSearchTask)
+		vecRanks, err := collectVectorSearchRanks(vecTask)
 		if err != nil {
-			logger.Error("Failed to perform vector search", zap.Error(err))
+			logger.Error("vector search failed", zap.Error(err))
 		}
 
-		logger.Info("Vector Search Results", zap.String("query", query), zap.Any("vecSearchChunkScoreMap", vecSearchChunkScoreMap))
-
-		// Combine scores
-		combinedScores := make(map[string]float64)
-		for id, score := range textSearchChunkScoreMap {
-			combinedScores[id] = score * textSearchWeight
+		//----------------------------------------------------------------------
+		// 3. Reciprocal-Rank Fusion
+		//     score(id) = Σ  weight_e / (rrfK + rank_e(id))
+		//----------------------------------------------------------------------
+		combined := make(map[string]float64)
+		for id, r := range textRanks {
+			combined[id] = textSearchWeight / float64(rrfK+r)
+		}
+		for id, r := range vecRanks {
+			combined[id] += vectorSearchWeight / float64(rrfK+r)
 		}
 
-		for id, score := range vecSearchChunkScoreMap {
-			combinedScores[id] += score * vectorSearchWeight
-		}
-
-		// Rank the chunks by combined score
-		type chunkScore struct {
+		//----------------------------------------------------------------------
+		// 4. Keep the top-N with a min-heap (higher RRF score = better)
+		//----------------------------------------------------------------------
+		type pair struct {
 			id    string
 			score float64
 		}
 
-		docScoresHeap := ds.NewMinHeap(func(a, b chunkScore) bool {
-			return a.score < b.score // Min heap. Lowest score at the top
-		})
-
-		for id, score := range combinedScores {
-			if score <= 0 {
-				continue // Skip low-scoring results
-			}
-
-			docScoresHeap.Push(chunkScore{id: id, score: score})
-			if docScoresHeap.Len() > maxChunks {
-				docScoresHeap.Pop() // Remove the lowest scoring chunk if we exceed maxChunks
+		h := ds.NewMinHeap(func(a, b pair) bool { return a.score < b.score })
+		for id, sc := range combined {
+			h.Push(pair{id, sc})
+			if h.Len() > maxChunks {
+				h.Pop()
 			}
 		}
 
-		selectedChunkIds := linq.Map(docScoresHeap.ToSortedSlice(), func(cs chunkScore) string {
-			return cs.id
-		})
-		slices.Reverse(selectedChunkIds) // Reverse to have highest scores first
+		ids := linq.Map(h.ToSortedSlice(), func(p pair) string { return p.id })
+		slices.Reverse(ids) // highest score first
 
-		// Fetch the top N chunks from the cache or database
-		selectedChunks := s.fetchChunksByIds(ctx, tenant, chunkCache, selectedChunkIds)
-		return selectedChunks, nil
+		//----------------------------------------------------------------------
+		// 5. Materialise the chunks
+		//----------------------------------------------------------------------
+		return s.fetchChunksByIds(ctx, tenant, cache, ids), nil
 	})
+}
+
+// Returns id→rank (1-based) **and** a cache of the full ChunkModel docs.
+func collectTextSearchRanks(
+	task <-chan async.Result[[]odm.SearchHit[db.ChunkModel]],
+) (map[string]int, map[string]*db.ChunkModel, error) {
+
+	ranks := make(map[string]int) // id → rank
+	cache := make(map[string]*db.ChunkModel)
+
+	hits, err := async.Await(task)
+	if err != nil {
+		return ranks, cache, status.Errorf(codes.Internal, "await text hits: %v", err)
+	}
+
+	for i, h := range hits {
+		id := h.Doc.Id()
+		if _, seen := ranks[id]; !seen { // keep first (best-ranked) hit
+			ranks[id] = i + 1  // 1-based rank
+			cache[id] = &h.Doc // stash full doc for later
+		}
+	}
+	return ranks, cache, nil
+}
+
+// Returns id→rank (1-based) for vector search hits.
+func collectVectorSearchRanks(
+	task <-chan async.Result[[]odm.SearchHit[db.ChunkAnnModel]],
+) (map[string]int, error) {
+
+	ranks := make(map[string]int)
+
+	hits, err := async.Await(task)
+	if err != nil {
+		return ranks, status.Errorf(codes.Internal, "await vector hits: %v", err)
+	}
+
+	for i, h := range hits {
+		id := h.Doc.Id()
+		if _, seen := ranks[id]; !seen {
+			ranks[id] = i + 1
+		}
+	}
+	return ranks, nil
 }
 
 func (s *SearchService) fetchChunksByIds(ctx context.Context, tenant string, cache map[string]*db.ChunkModel, rankedIds []string) []*db.ChunkModel {
@@ -243,76 +278,4 @@ func buildSearchResponse(docs []*db.ChunkModel) *pb.SearchResponse {
 		Results: out,
 		Status:  "success",
 	}
-}
-
-func collectVectorSearchHitTasks(task <-chan async.Result[[]odm.SearchHit[db.ChunkAnnModel]]) (map[string]float64, error) {
-	out := make(map[string]float64)
-
-	// 1. Await all tasks
-	searchHits, err := async.Await(task)
-	if err != nil {
-		logger.Error("Failed to collect search hits", zap.Error(err))
-		return out, status.Errorf(codes.Internal, "collect search hits: %v", err)
-	}
-
-	max := 0.0
-	for _, h := range searchHits {
-		if h.Score > max {
-			max = h.Score
-		}
-	}
-	if max == 0 {
-		max = 1
-	}
-
-	// 3. Remove duplicates by averaging the scores
-	for _, hit := range searchHits {
-		out[hit.Doc.Id()] = hit.Score / max // Normalise score to [0,1]
-	}
-
-	return out, nil
-}
-
-// collectTextSearchHitTasks merges duplicate hits *and* normalises the
-// averaged text-search scores onto [0,1]  (0 = worst, 1 = best).
-func collectTextSearchHitTasks(task <-chan async.Result[[]odm.SearchHit[db.ChunkModel]]) (map[string]float64, map[string]*db.ChunkModel, error) {
-	cache := make(map[string]*db.ChunkModel)
-	chunkToScoreMap := make(map[string]float64) // id → raw text score
-
-	/* 1. await ------------------------------------------------------------ */
-	textSearchResult, err := async.Await(task)
-	if err != nil {
-		logger.Error("Failed to collect search hits", zap.Error(err))
-		return chunkToScoreMap, cache, status.Errorf(codes.Internal, "collect search hits: %v", err)
-	}
-
-	/* 2. Get chunk to score map and chunk cache ------------------------------------------ */
-	for _, searchHit := range textSearchResult {
-		id := searchHit.Doc.Id()
-		chunkToScoreMap[id] = searchHit.Score
-
-		if _, ok := cache[id]; !ok {
-			cache[id] = &searchHit.Doc
-		}
-	}
-
-	/* 3. min–max normalisation  ------------------------------------------ */
-	//   Atlas text scores can be >> 1; we squeeze them to 0-1 so that
-	//   textWeight + vectorWeight combine on comparable scales.
-	var maxRaw float64
-	for _, v := range chunkToScoreMap {
-		if v > maxRaw {
-			maxRaw = v
-		}
-	}
-	if maxRaw == 0 {
-		maxRaw = 1 // avoid div-zero if all scores are identical/zero
-	}
-
-	norm := make(map[string]float64, len(chunkToScoreMap))
-	for id, v := range chunkToScoreMap {
-		norm[id] = v / maxRaw // ∈[0,1]
-	}
-
-	return norm, cache, nil
 }

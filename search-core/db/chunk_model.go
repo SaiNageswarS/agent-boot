@@ -4,6 +4,10 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/odm"
 )
 
+const TextSearchIndexName = "chunkIndex"
+
+var TextSearchPaths = []string{"sentences", "sectionPath", "tags", "title"}
+
 type ChunkModel struct {
 	ChunkID      string            `json:"chunkId" bson:"_id"`
 	Title        string            `json:"title" bson:"title"` // Title of the document, e.g., "Introduction to AI"
@@ -23,8 +27,8 @@ func (m ChunkModel) CollectionName() string { return "chunks" }
 func (m ChunkModel) TermSearchIndexSpecs() []odm.TermSearchIndexSpec {
 	return []odm.TermSearchIndexSpec{
 		{
-			Name:  "chunkIndex",
-			Paths: []string{"sentences", "sectionPath", "tags", "title"},
+			Name:  TextSearchIndexName,
+			Paths: TextSearchPaths,
 		},
 	}
 }

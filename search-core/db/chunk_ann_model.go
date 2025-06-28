@@ -1,13 +1,14 @@
 package db
 
 import (
-	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const VectorIndexName = "chunkEmbeddingIndex"
 const VectorPath = "embedding"
+
+const EmbeddingDimensions = 2048 // jina ai 4
 
 type ChunkAnnModel struct {
 	ChunkID   string      `json:"chunkId" bson:"_id"` // Unique
@@ -25,7 +26,7 @@ func (m ChunkAnnModel) VectorIndexSpecs() []odm.VectorIndexSpec {
 			Name:          VectorIndexName,
 			Path:          VectorPath,
 			Type:          "vector",
-			NumDimensions: prompts.EmbeddingDimensions,
+			NumDimensions: EmbeddingDimensions,
 			Similarity:    "cosine",
 			Quantization:  "scalar",
 		},

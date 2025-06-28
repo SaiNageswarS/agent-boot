@@ -20,7 +20,6 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-api-boot/server"
-	"github.com/ollama/ollama/api"
 	temporalClient "go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -38,31 +37,24 @@ func main() {
 		logger.Fatal("Failed to load config", zap.Error(err))
 	}
 
-	az := cloud.ProvideAzure(&ccfgg.BootConfig)
-
 	claude, err := llm.ProvideAnthropicClient()
 	if err != nil {
 		logger.Fatal("Failed to create Claude client", zap.Error(err))
-	}
-
-	ollamaClient, err := api.ClientFromEnvironment()
-	if err != nil {
-		logger.Fatal("Failed to create Ollama client", zap.Error(err))
-	}
-
-	mongoClient, err := odm.GetClient()
-	if err != nil {
-		logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
 	}
 
 	boot, err := server.New().
 		GRPCPort(":50051"). // or ":0" for dynamic
 		HTTPPort(":8081").
 		Provide(ccfgg).
-		Provide(az).
-		Provide(ollamaClient).
+		Provide(&ccfgg.BootConfig).
+		ProvideFunc(cloud.ProvideAzure). // or cloud.ProvideGcp
+
+		// Register RAG clients
 		Provide(claude).
-		Provide(mongoClient).
+		// ProvideFunc(llm.ProvideOllamaEmbeddingClient).
+		ProvideFunc(llm.ProvideJinaAIEmbeddingClient).
+		ProvideFunc(odm.ProvideMongoClient).
+
 		// Add Workers
 		WithTemporal(ccfgg.TemporalGoTaskQueue, &temporalClient.Options{
 			HostPort: ccfgg.TemporalHostPort,
@@ -72,6 +64,7 @@ func main() {
 		RegisterTemporalWorkflow(workflows.InitTenantWorkflow).
 		RegisterTemporalWorkflow(workflows.PdfHandlerWorkflow).
 		RegisterTemporalWorkflow(workflows.EmbedChunksWorkflow).
+
 		// Register gRPC service impls
 		ApplySettings(getStreamingOptimizations()).
 		RegisterService(server.Adapt(pb.RegisterLoginServer), services.ProvideLoginService).

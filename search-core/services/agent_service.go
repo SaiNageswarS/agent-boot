@@ -13,8 +13,6 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
-	"github.com/ollama/ollama/api"
-	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -22,16 +20,16 @@ import (
 
 type AgentService struct {
 	pb.UnimplementedAgentServer
-	mongo         *mongo.Client
+	mongo         odm.MongoClient
 	llmClient     *llm.AnthropicClient
 	searchService *SearchService
 }
 
-func ProvideAgentService(mongo *mongo.Client, llmClient *llm.AnthropicClient, ollamaClient *api.Client) *AgentService {
+func ProvideAgentService(mongo odm.MongoClient, llmClient *llm.AnthropicClient, embedder llm.Embedder) *AgentService {
 	return &AgentService{
 		mongo:         mongo,
 		llmClient:     llmClient,
-		searchService: ProvideSearchService(mongo, ollamaClient),
+		searchService: ProvideSearchService(mongo, embedder),
 	}
 }
 

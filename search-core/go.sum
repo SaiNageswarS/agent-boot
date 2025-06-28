@@ -52,8 +52,8 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0.51.0/go.mod h1:SZiPHWGOOk3bl8tkevxkoiwPgsIl6CwrWcbwjfHZpdM=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.51.0 h1:6/0iUd0xrnX7qt+mLNRwg5c0PGv8wpE8K90ryANQwMI=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.51.0/go.mod h1:otE2jQekW/PqXk1Awf5lmfokJx4uwuqcj1ab5SpGeW0=
-github.com/SaiNageswarS/go-api-boot v1.0.26 h1:sJBN16EFhBgJuaYKLkE5QYnuNAdFxj0XGEGzuyh2Qew=
-github.com/SaiNageswarS/go-api-boot v1.0.26/go.mod h1:mPs3IERxHHgu2oj2Lo8SYdNhnWWOWcIxMylBFmhAcQY=
+github.com/SaiNageswarS/go-api-boot v1.0.28 h1:CD03yjKlfWfSx/6DKv5gxyPM8k48M6t3iQICtOEI0O8=
+github.com/SaiNageswarS/go-api-boot v1.0.28/go.mod h1:Zw24q6tFlTNlrC90MAgwAXxuUFflYm5kDhow0Y9zigw=
 github.com/SaiNageswarS/go-collection-boot v1.0.3 h1:ZBks1T8qqOo/RZqeArX7nGwc1fen8BFKB25hcStNhp0=
 github.com/SaiNageswarS/go-collection-boot v1.0.3/go.mod h1:Zpt8W8nCgucjdQyxOpQbIxzuVBnijo9y6CrEqTF6Pnc=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
@@ -155,8 +155,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/nexus-rpc/sdk-go v0.4.0 h1:A/IjWWAiWecnYnt7uI0Cw6ci6zJwaM9Ma3q4hDDxUVc=
 github.com/nexus-rpc/sdk-go v0.4.0/go.mod h1:TpfkM2Cw0Rlk9drGkoiSMpFqflKTiQLWUNyKJjF8mKQ=
-github.com/ollama/ollama v0.9.1 h1:8FbIU2QJZIvvPX7wCmW2SgEsLeB/M+/yJ1UAuiuGgqs=
-github.com/ollama/ollama v0.9.1/go.mod h1:+5wt6UPgPmzYhnpLJ/rObxJJyEXURZ/SKKCMQsff8bA=
+github.com/ollama/ollama v0.9.3 h1:LipCesw/hc2zbPLPmu5pnUp/L/P2FwQQ3JmceEEJbgc=
+github.com/ollama/ollama v0.9.3/go.mod h1:zLwx3iZ3AI4Rc/egsrx3u1w4RU2MHQ/Ylxse48jvyt4=
 github.com/opentracing/opentracing-go v1.1.0/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c/go.mod h1:7rwL4CYBLnjLxUqIJNnCWiEdr3bn6IUYi15bNlnbCCU=

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
-	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
@@ -81,7 +81,7 @@ func (s *Activities) EmbedChunks(ctx context.Context, tenant string, chunkIds []
 		// Embed the chunk using the LLM client
 		embeddingText := chunkModel.Title + "\n" + chunkModel.SectionPath + "\n" + strings.Join(chunkModel.Sentences, "\n")
 
-		embeddings, err := prompts.EmbedOnce(ctx, s.ollamaClient, embeddingText)
+		embeddings, err := async.Await(s.embedder.GetEmbedding(ctx, embeddingText, llm.WithTask("retrieval.passage")))
 		if err != nil {
 			return errors.New("failed to embed chunk: " + err.Error())
 		}

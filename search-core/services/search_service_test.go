@@ -5,12 +5,11 @@ import (
 	"testing"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
-	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
 	"github.com/SaiNageswarS/go-api-boot/dotenv"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
 	"github.com/SaiNageswarS/go-collection-boot/linq"
-	"github.com/ollama/ollama/api"
 	"github.com/stretchr/testify/assert"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -18,18 +17,15 @@ import (
 func TestVectorSearch(t *testing.T) {
 	dotenv.LoadEnv("../.env")
 
-	mongoClient, err := odm.GetClient()
-	assert.NoError(t, err, "Failed to connect to MongoDB")
-
-	ollamaClient, err := api.ClientFromEnvironment()
-	assert.NoError(t, err, "Failed to create Ollama client")
+	mongoClient := odm.ProvideMongoClient()
+	embedder := llm.ProvideJinaAIEmbeddingClient()
 
 	testTenant := "devinderhealthcare"
 	testQuery := "homeopathic remedies fear of death anxiety treatment"
 	expectedChunkPrefixes := []string{"1544328200c1", "9a24dcec7d80"}
 
 	t.Run("TestVectorSearch", func(t *testing.T) {
-		queryVector, err := prompts.EmbedOnce(t.Context(), ollamaClient, testQuery)
+		queryVector, err := async.Await(embedder.GetEmbedding(t.Context(), testQuery, llm.WithTask("retrieval.query")))
 		assert.NoError(t, err, "Failed to embed query")
 
 		vecSearchTask := odm.CollectionOf[db.ChunkAnnModel](mongoClient, testTenant).
@@ -82,7 +78,7 @@ func TestVectorSearch(t *testing.T) {
 	})
 
 	t.Run("TestHybridSearch", func(t *testing.T) {
-		searchService := ProvideSearchService(mongoClient.(*mongo.Client), ollamaClient)
+		searchService := ProvideSearchService(mongoClient.(*mongo.Client), embedder)
 		hybridSearchTask := searchService.hybridSearch(t.Context(), testTenant, testQuery)
 
 		hybridSearchResults, err := async.Await(hybridSearchTask)

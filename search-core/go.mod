@@ -3,9 +3,9 @@ module github.com/SaiNageswarS/agent-boot/search-core
 go 1.24.4
 
 require (
-	github.com/SaiNageswarS/go-api-boot v1.0.26
+	github.com/SaiNageswarS/go-api-boot v1.0.28
 	github.com/SaiNageswarS/go-collection-boot v1.0.3
-	github.com/ollama/ollama v0.9.1
+	github.com/stretchr/testify v1.10.0
 	github.com/yuin/goldmark v1.7.12
 	go.mongodb.org/mongo-driver/v2 v2.2.2
 	go.temporal.io/sdk v1.34.0
@@ -64,6 +64,7 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nexus-rpc/sdk-go v0.4.0 // indirect
+	github.com/ollama/ollama v0.9.3 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -75,7 +76,6 @@ require (
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect

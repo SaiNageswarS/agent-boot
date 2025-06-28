@@ -6,16 +6,14 @@ import (
 	"slices"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
-	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
 	"github.com/SaiNageswarS/go-api-boot/auth"
+	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
 	"github.com/SaiNageswarS/go-collection-boot/ds"
 	"github.com/SaiNageswarS/go-collection-boot/linq"
-	"github.com/ollama/ollama/api"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,14 +31,14 @@ const (
 
 type SearchService struct {
 	pb.UnimplementedSearchServer
-	mongo        *mongo.Client
-	ollamaClient *api.Client
+	mongo    odm.MongoClient
+	embedder llm.Embedder
 }
 
-func ProvideSearchService(mongo *mongo.Client, ollamaClient *api.Client) *SearchService {
+func ProvideSearchService(mongo odm.MongoClient, embedder llm.Embedder) *SearchService {
 	return &SearchService{
-		mongo:        mongo,
-		ollamaClient: ollamaClient,
+		mongo:    mongo,
+		embedder: embedder,
 	}
 }
 
@@ -85,6 +83,49 @@ func (s *SearchService) Search(ctx context.Context, req *pb.SearchRequest) (*pb.
 	return buildSearchResponse(rankedChunks), nil
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+//
+//	Reciprocal-Rank Fusion (RRF)
+//
+//	Goal
+//	────
+//	▸ Convert *recall hits* (relevant docs that show up anywhere) into
+//	  *precision hits* (relevant docs that land in the first N spots the user
+//	  actually sees).
+//
+//	How it works
+//	────────────
+//	    RRF_score(d) = Σ_e  w_e / (k + rank_e(d))
+//
+//	    • One top-rank appearance (rank = 1) gets a big boost 1/(k+1), often
+//	      enough to push the doc into the visible window.
+//	    • A tail hit (rank = 20) earns < 1 % of that weight, so background
+//	      noise barely moves the needle.
+//
+//	Why *rank* beats raw *score*
+//	────────────────────────────
+//	    – Scores live on different scales (BM25 ≈ 0-1000, cosine ≈ −1-1,
+//	      PageRank ≪ 1).  Cross-normalising them is brittle.
+//	    – Even a single engine’s scores drift when we rebuild the index or
+//	      retrain embeddings; relative rank is far more stable.
+//	    – Rank directly expresses “how good versus its peers,” the signal we
+//	      need when merging heterogeneous lists.
+//
+//	Why we don’t hard-threshold BM25 or similarity scores
+//	─────────────────────────────────────────────────────
+//	    – The 1/(k+rank) formula *already* down-weights tail hits; a rank-20
+//	      doc contributes < 1 % of a rank-1 doc, so low-quality noise is
+//	      effectively ignored without hurting recall.
+//	    – Fixed score cut-offs tie us to one model/index version and risk
+//	      dropping docs that are mediocre in one engine but stellar in another
+//	      (the classic hybrid-search win).
+//
+//	Bottom line
+//	───────────
+//	Let every engine vote by rank, fuse with 1/(k+rank), and keep explicit
+//	score thresholds only for domain-specific guard-rails.
+//
+// ──────────────────────────────────────────────────────────────────────────────
 func (s *SearchService) hybridSearch(ctx context.Context,
 	tenant, query string) <-chan async.Result[[]*db.ChunkModel] {
 
@@ -99,7 +140,7 @@ func (s *SearchService) hybridSearch(ctx context.Context,
 				Limit:     textK,
 			})
 
-		emb, err := prompts.EmbedOnce(ctx, s.ollamaClient, query)
+		emb, err := async.Await(s.embedder.GetEmbedding(ctx, query, llm.WithTask("retrieval.query")))
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "embed: %v", err)
 		}

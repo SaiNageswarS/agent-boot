@@ -4,6 +4,9 @@ import (
 	pb "agent-boot/proto/generated"
 	"context"
 	"slices"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/go-api-boot/auth"
@@ -80,6 +83,7 @@ func (s *SearchService) Search(ctx context.Context, req *pb.SearchRequest) (*pb.
 		return c.ChunkID
 	})
 
+	rankedChunks = s.addNeighborsAndReorder(ctx, tenant, rankedChunks)
 	return buildSearchResponse(rankedChunks), nil
 }
 
@@ -293,6 +297,75 @@ func (s *SearchService) fetchChunksByIds(ctx context.Context, tenant string, cac
 	return ordered
 }
 
+func (s *SearchService) addNeighborsAndReorder(ctx context.Context, tenant string, rankedChunks []*db.ChunkModel) []*db.ChunkModel {
+	if len(rankedChunks) == 0 {
+		return rankedChunks
+	}
+
+	// 1. Collect all neighbor IDs we need to fetch
+	neighborIds := ds.NewSet[string]()
+	for _, chunk := range rankedChunks {
+		sectionId, index := getSectionAndIndex(chunk)
+		if sectionId != "" && index >= 0 {
+			// Add previous neighbor
+			if index > 0 {
+				prevId := sectionId + "_" + strconv.Itoa(index-1)
+				neighborIds.Add(prevId)
+			}
+			// Add next neighbor
+			nextId := sectionId + "_" + strconv.Itoa(index+1)
+			neighborIds.Add(nextId)
+		}
+	}
+
+	// Remove IDs that we already have
+	for _, chunk := range rankedChunks {
+		neighborIds.Remove(chunk.ChunkID)
+	}
+
+	// 2. Fetch all neighbors in one DB call
+	var allChunks []*db.ChunkModel
+	allChunks = append(allChunks, rankedChunks...)
+
+	if neighborIds.Len() > 0 {
+		neighbors, err := async.Await(
+			odm.CollectionOf[db.ChunkModel](s.mongo, tenant).Find(ctx, bson.M{"_id": bson.M{"$in": neighborIds.ToSlice()}}, nil, 0, 0),
+		)
+
+		if err != nil {
+			logger.Error("Failed to fetch neighbor chunks", zap.Error(err))
+		} else {
+			allChunks = append(allChunks, linq.Map(neighbors, func(ch db.ChunkModel) *db.ChunkModel { return &ch })...)
+		}
+	}
+
+	// 3. Group by section
+	sectionGroups := make(map[string][]*db.ChunkModel)
+	for _, chunk := range allChunks {
+		sectionId, _ := getSectionAndIndex(chunk)
+		if sectionId != "" {
+			sectionGroups[sectionId] = append(sectionGroups[sectionId], chunk)
+		}
+	}
+
+	// 4. Sort each section by index
+	for sectionId := range sectionGroups {
+		sort.Slice(sectionGroups[sectionId], func(i, j int) bool {
+			_, indexI := getSectionAndIndex(sectionGroups[sectionId][i])
+			_, indexJ := getSectionAndIndex(sectionGroups[sectionId][j])
+			return indexI < indexJ
+		})
+	}
+
+	// 5. Flatten back to a single list
+	var result []*db.ChunkModel
+	for _, chunks := range sectionGroups {
+		result = append(result, chunks...)
+	}
+
+	return result
+}
+
 func buildSearchResponse(docs []*db.ChunkModel) *pb.SearchResponse {
 	if len(docs) == 0 {
 		logger.Info("No search results found")
@@ -319,4 +392,15 @@ func buildSearchResponse(docs []*db.ChunkModel) *pb.SearchResponse {
 		Results: out,
 		Status:  "success",
 	}
+}
+
+func getSectionAndIndex(c *db.ChunkModel) (string, int) {
+	// ChunkId is in the format "sectionId_index"
+	parts := strings.Split(c.ChunkID, "_")
+	if len(parts) < 2 {
+		return "", -1
+	}
+
+	idx, _ := strconv.Atoi(parts[1])
+	return parts[0], idx
 }

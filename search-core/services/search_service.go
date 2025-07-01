@@ -357,10 +357,16 @@ func (s *SearchService) addNeighborsAndReorder(ctx context.Context, tenant strin
 		})
 	}
 
-	// 5. Flatten back to a single list
+	// 5. Flatten back to a single list by section Rank.
 	var result []*db.ChunkModel
-	for _, chunks := range sectionGroups {
-		result = append(result, chunks...)
+	for _, rankedChunk := range rankedChunks {
+		sectionId, _ := getSectionAndIndex(rankedChunk)
+		sectionChunks, exists := sectionGroups[sectionId]
+		if exists {
+			result = append(result, sectionChunks...)
+			// Remove the section from the map to avoid duplicates
+			delete(sectionGroups, sectionId)
+		}
 	}
 
 	return result

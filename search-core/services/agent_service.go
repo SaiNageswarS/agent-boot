@@ -38,7 +38,7 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	ctx := stream.Context()
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	session := db.NewSessionModel(userId)
+	session := db.NewSessionModel(userId, req.SessionId)
 	if len(req.SessionId) > 0 {
 		existingSession, err := async.Await(odm.CollectionOf[db.SessionModel](s.mongo, tenant).FindOneByID(ctx, req.SessionId))
 		if err != nil {

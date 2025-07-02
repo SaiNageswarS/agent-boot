@@ -1,7 +1,5 @@
 package db
 
-import "github.com/google/uuid"
-
 // A single exchange between the user and the agent.
 // It contains the user input, search queries, search result chunk IDs, agent's answer,
 // and the model used to generate the answer.
@@ -21,18 +19,15 @@ type SessionModel struct {
 	CreatedOn int64       `bson:"createdOn"`
 }
 
-func NewSessionModel(userId string) *SessionModel {
+func NewSessionModel(userId, sessionId string) *SessionModel {
 	return &SessionModel{
-		ID:     uuid.New().String(),
+		ID:     sessionId,
 		UserId: userId,
 		Turns:  []TurnModel{},
 	}
 }
 
 func (m SessionModel) Id() string {
-	if len(m.ID) == 0 {
-		return uuid.New().String()
-	}
 	return m.ID
 }
 

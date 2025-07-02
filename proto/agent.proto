@@ -12,6 +12,7 @@ service Agent {
 
 message AgentInput {
     string text = 1;
+    string sessionId = 2;
 }
 
 message AgentStreamChunk {

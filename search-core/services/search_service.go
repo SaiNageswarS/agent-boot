@@ -391,6 +391,7 @@ func buildSearchResponse(docs []*db.ChunkModel) *pb.SearchResponse {
 			Source:      doc.SourceURI,
 			URL:         doc.SourceURI,
 			DocIndex:    int32(idx + 1),
+			ChunkId:     doc.ChunkID,
 		})
 	}
 

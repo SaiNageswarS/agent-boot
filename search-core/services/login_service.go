@@ -36,8 +36,8 @@ func (u *LoginService) AuthFuncOverride(ctx context.Context, fullMethodName stri
 }
 
 func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.AuthResponse, error) {
-	loginInfo, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Tenant).FindOneByID(ctx, db.LoginModel{
-		EmailId: req.Email}.Id()))
+	loginInfo, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Tenant).FindOneByID(ctx,
+		db.NewLoginModel(req.Email).Id()))
 	if err != nil || loginInfo == nil {
 		return nil, status.Error(codes.NotFound, "User not found")
 	}
@@ -69,13 +69,11 @@ func (s *LoginService) SignUp(ctx context.Context, req *pb.SignUpRequest) (*pb.A
 		return nil, status.Error(codes.Internal, "Failed to hash password: "+err.Error())
 	}
 
-	loginInfo := db.LoginModel{
-		EmailId:        req.Email,
-		HashedPassword: hashedPassword,
-	}
+	loginInfo := db.NewLoginModel(req.Email)
+	loginInfo.HashedPassword = hashedPassword
 
 	// Save the login info to the database
-	_, err = async.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Tenant).Save(ctx, loginInfo))
+	_, err = async.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Tenant).Save(ctx, *loginInfo))
 	if err != nil {
 		logger.Error("Failed to save login info", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed to save login info: "+err.Error())

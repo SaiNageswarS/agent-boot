@@ -13,6 +13,7 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
+	"github.com/SaiNageswarS/go-collection-boot/linq"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -35,7 +36,20 @@ func ProvideAgentService(mongo odm.MongoClient, llmClient *llm.AnthropicClient, 
 
 func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreamingServer[pb.AgentStreamChunk]) error {
 	ctx := stream.Context()
-	_, tenant := auth.GetUserIdAndTenant(ctx)
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	session := db.NewSessionModel(userId)
+	if len(req.SessionId) > 0 {
+		existingSession, err := async.Await(odm.CollectionOf[db.SessionModel](s.mongo, tenant).FindOneByID(ctx, req.SessionId))
+		if err != nil {
+			logger.Error("Error finding existing session", zap.String("session_id", req.SessionId), zap.Error(err))
+		} else if existingSession != nil {
+			logger.Info("Using existing session", zap.String("session_id", req.SessionId))
+			session = existingSession
+		}
+	}
+
+	turn := db.TurnModel{UserInput: req.Text}
 
 	sh := newStreamHelper(stream)
 	defer sh.Recover() // never crash caller
@@ -81,6 +95,7 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	if err := sh.SendQueries(searchQueries.SearchQueries); err != nil {
 		return err
 	}
+	turn.SearchQueries = searchQueries.SearchQueries
 
 	// 3. Perform Search using Search Service based on extracted queries of the agent input.
 	// Update metadata - starting search
@@ -95,6 +110,9 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	}
 
 	totalResults := len(searchResults.Results)
+	turn.SearchResultChunkIds = linq.Map(searchResults.Results, func(r *pb.SearchResult) string {
+		return r.ChunkId
+	})
 
 	// Update metadata with actual results count
 	if err := sh.SendMetadata("processing_results", int32(len(searchQueries.SearchQueries)), int32(totalResults)); err != nil {
@@ -146,6 +164,12 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 		logger.Error("Error generating answer", zap.Error(answerErr))
 		return sh.SendFinalError("Failed to generate answer, but search results are available above", "ANSWER_GENERATION_FAILED")
 	}
+
+	turn.AgentAnswer = answer
+	turn.Model = "claude-3-5-sonnet-20241022"
+	session.Turns = append(session.Turns, turn)
+
+	async.Await(odm.CollectionOf[db.SessionModel](s.mongo, tenant).Save(ctx, *session))
 
 	// Send answer with extra safety
 	logger.Info("Sending answer", zap.Int("answer_length", len(answer)))

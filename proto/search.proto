@@ -15,7 +15,7 @@ message SearchRequest {
 message SearchResponse {
     repeated SearchResult results = 1;
     string status = 2;   // "success", "no_results", "partial_results"
-    repeated string searchQueries = 3;
+    repeated string searchQueries = 3;  // For mcp to know searchQueries extracted by it.
 }
 
 message SearchResult {
@@ -25,4 +25,5 @@ message SearchResult {
     string source = 4;
     string URL = 5;
     string title = 6;
+    string chunkId = 7;
 }

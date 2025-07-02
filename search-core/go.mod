@@ -5,6 +5,7 @@ go 1.24.4
 require (
 	github.com/SaiNageswarS/go-api-boot v1.0.28
 	github.com/SaiNageswarS/go-collection-boot v1.0.3
+	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.10.0
 	github.com/yuin/goldmark v1.7.12
 	go.mongodb.org/mongo-driver/v2 v2.2.2
@@ -54,7 +55,6 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.2 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect

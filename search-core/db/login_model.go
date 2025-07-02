@@ -9,9 +9,18 @@ type LoginModel struct {
 	CreatedOn      int64  `bson:"createdOn"`
 }
 
+func NewLoginModel(emailId string) *LoginModel {
+	userId, _ := odm.HashedKey(emailId)
+	return &LoginModel{
+		UserId:  userId,
+		EmailId: emailId,
+	}
+}
+
 func (m LoginModel) Id() string {
 	if len(m.UserId) == 0 {
-		m.UserId, _ = odm.HashedKey(m.EmailId)
+		userId, _ := odm.HashedKey(m.EmailId)
+		return userId
 	}
 
 	return m.UserId

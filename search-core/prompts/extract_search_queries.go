@@ -16,7 +16,7 @@ type ExtractSearchQueriesResponse struct {
 	SearchQueries []string `json:"search_queries"`
 }
 
-func ExtractSearchQueries(ctx context.Context, client *llm.AnthropicClient, userInput, agentCapability string) <-chan async.Result[*ExtractSearchQueriesResponse] {
+func ExtractSearchQueries(ctx context.Context, client llm.LLMClient, modelVersion, userInput, agentCapability string) <-chan async.Result[*ExtractSearchQueriesResponse] {
 	return async.Go(func() (*ExtractSearchQueriesResponse, error) {
 		systemPrompt, err := loadPrompt("templates/extract_agent_search_query_system.md", map[string]string{})
 		if err != nil {
@@ -32,20 +32,25 @@ func ExtractSearchQueries(ctx context.Context, client *llm.AnthropicClient, user
 			return nil, err
 		}
 
-		request := llm.AnthropicRequest{
-			Model:       "claude-3-5-sonnet-20241022",
-			MaxTokens:   4000,
-			System:      systemPrompt,
-			Temperature: 0.3,
-			Messages: []llm.Message{
-				{
-					Role:    "user",
-					Content: userPrompt,
-				},
+		messages := []llm.Message{
+			{
+				Role:    "user",
+				Content: userPrompt,
 			},
 		}
 
-		response, err := async.Await(client.GenerateInference(ctx, &request))
+		var response string
+		callback := func(chunk string) error {
+			response += chunk
+			return nil
+		}
+
+		err = client.GenerateInference(ctx, messages, callback,
+			llm.WithLLMModel(modelVersion),
+			llm.WithMaxTokens(4000),
+			llm.WithTemperature(0.3),
+			llm.WithSystemPrompt(systemPrompt))
+
 		if err != nil {
 			logger.Error("Failed to generate inference", zap.Error(err))
 			return nil, err
@@ -58,5 +63,4 @@ func ExtractSearchQueries(ctx context.Context, client *llm.AnthropicClient, user
 
 		return out, nil
 	})
-
 }

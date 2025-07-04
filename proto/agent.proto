@@ -13,6 +13,7 @@ service Agent {
 message AgentInput {
     string text = 1;
     string sessionId = 2;
+    string model = 3; // claude or llama
 }
 
 message AgentStreamChunk {

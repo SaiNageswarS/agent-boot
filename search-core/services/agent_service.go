@@ -22,14 +22,16 @@ import (
 type AgentService struct {
 	pb.UnimplementedAgentServer
 	mongo         odm.MongoClient
-	llmClient     *llm.AnthropicClient
+	claude        *llm.AnthropicClient
+	llama         *llm.OllamaLLMClient
 	searchService *SearchService
 }
 
-func ProvideAgentService(mongo odm.MongoClient, llmClient *llm.AnthropicClient, embedder llm.Embedder) *AgentService {
+func ProvideAgentService(mongo odm.MongoClient, claude *llm.AnthropicClient, llama *llm.OllamaLLMClient, embedder llm.Embedder) *AgentService {
 	return &AgentService{
 		mongo:         mongo,
-		llmClient:     llmClient,
+		claude:        claude,
+		llama:         llama,
 		searchService: ProvideSearchService(mongo, embedder),
 	}
 }
@@ -76,7 +78,14 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	}
 
 	// 2. Extract search queries using LLM.
-	searchQueries, err := async.Await(prompts.ExtractSearchQueries(ctx, s.llmClient, req.Text, agentDetail.Capability))
+	var searchQueriesTask <-chan async.Result[*prompts.ExtractSearchQueriesResponse]
+	if req.Model == "claude" {
+		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.claude, claudeVersion, req.Text, agentDetail.Capability)
+	} else {
+		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.llama, llamaVersion, req.Text, agentDetail.Capability)
+	}
+
+	searchQueries, err := async.Await(searchQueriesTask)
 	if err != nil {
 		logger.Error("Error extracting agent input", zap.Error(err))
 		return sh.SendFinalError("Failed to extract search queries from your input", "INPUT_EXTRACTION_FAILED")
@@ -147,9 +156,13 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 		return sh.SendFinalError("Failed to process search results for answer generation", "MARSHAL_FAILED")
 	}
 
-	answerTask := async.Go(func() (string, error) {
-		return async.Await(prompts.GenerateAnswer(ctx, s.llmClient, agentDetail.Capability, req.Text, string(searchResultsJson)))
-	})
+	var answerTask <-chan async.Result[string]
+
+	if req.Model == "claude" {
+		answerTask = prompts.GenerateAnswer(ctx, s.claude, claudeVersion, agentDetail.Capability, req.Text, string(searchResultsJson))
+	} else {
+		answerTask = prompts.GenerateAnswer(ctx, s.llama, llamaVersion, agentDetail.Capability, req.Text, string(searchResultsJson))
+	}
 
 	// Wait for search results to finish sending
 	_, searchErr := async.Await(sendSearchResultsTask)
@@ -166,7 +179,7 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	}
 
 	turn.AgentAnswer = answer
-	turn.Model = "claude-3-5-sonnet-20241022"
+	turn.Model = req.Model
 	session.Turns = append(session.Turns, turn)
 
 	async.Await(odm.CollectionOf[db.SessionModel](s.mongo, tenant).Save(ctx, *session))
@@ -291,3 +304,8 @@ func (h *streamHelper) Recover() {
 		logger.Error("Stream panic recovered", zap.Any("panic", r))
 	}
 }
+
+const (
+	claudeVersion = "claude-3-5-sonnet-20241022"
+	llamaVersion  = "llama-3.2-70b-instruct"
+)

@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func GenerateTitle(ctx context.Context, client *llm.AnthropicClient, introDocSnippet string) <-chan async.Result[string] {
+func GenerateTitle(ctx context.Context, client llm.LLMClient, introDocSnippet string) <-chan async.Result[string] {
 	return async.Go(func() (string, error) {
 		systemPrompt, err := loadPrompt("templates/generate_title_system.md", map[string]string{})
 		if err != nil {
@@ -25,19 +25,25 @@ func GenerateTitle(ctx context.Context, client *llm.AnthropicClient, introDocSni
 			return "", err
 		}
 
-		request := llm.AnthropicRequest{
-			Model:       "claude-3-5-haiku-20241022", // Using Haiku as the "mini" model
-			MaxTokens:   4000,
-			System:      systemPrompt,
-			Temperature: 0.2, // For stable outputs
-			Messages: []llm.Message{
-				{
-					Role:    "user",
-					Content: userPrompt,
-				},
+		messages := []llm.Message{
+			{
+				Role:    "user",
+				Content: userPrompt,
 			},
 		}
 
-		return async.Await(client.GenerateInference(ctx, &request))
+		var response string
+
+		err = client.GenerateInference(ctx, messages, func(chunk string) error {
+			response += chunk
+			return nil
+		},
+			llm.WithLLMModel("claude-3-5-haiku-20241022"),
+			llm.WithMaxTokens(4000),
+			llm.WithTemperature(0.2),
+			llm.WithSystemPrompt(systemPrompt),
+		)
+
+		return response, err
 	})
 }

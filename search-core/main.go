@@ -37,10 +37,8 @@ func main() {
 		logger.Fatal("Failed to load config", zap.Error(err))
 	}
 
-	claude, err := llm.ProvideAnthropicClient()
-	if err != nil {
-		logger.Fatal("Failed to create Claude client", zap.Error(err))
-	}
+	claude := llm.ProvideAnthropicClient()
+	ollamaLLMClient := llm.ProvideOllamaClient()
 
 	boot, err := server.New().
 		GRPCPort(":50051"). // or ":0" for dynamic
@@ -51,6 +49,7 @@ func main() {
 
 		// Register RAG clients
 		Provide(claude).
+		Provide(ollamaLLMClient).
 		// ProvideFunc(llm.ProvideOllamaEmbeddingClient).
 		ProvideFunc(llm.ProvideJinaAIEmbeddingClient).
 		ProvideFunc(odm.ProvideMongoClient).

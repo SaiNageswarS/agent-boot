@@ -236,8 +236,8 @@ git.sr.ht/~sbinet/gg v0.6.0/go.mod h1:uucygbfC9wVPQIfrmwM2et0imr8L7KQWywX0xpFMm9
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.26.0/go.mod h1:2bIszWvQRlJVmJLiuLhukLImRjKPcYdzzsx6darK02A=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
-github.com/SaiNageswarS/go-api-boot v1.0.28 h1:CD03yjKlfWfSx/6DKv5gxyPM8k48M6t3iQICtOEI0O8=
-github.com/SaiNageswarS/go-api-boot v1.0.28/go.mod h1:Zw24q6tFlTNlrC90MAgwAXxuUFflYm5kDhow0Y9zigw=
+github.com/SaiNageswarS/go-api-boot v1.0.29 h1:VE+4VahOX9o2XDqOYoAhvZRoxeEef/h0P9+DJcNFKmM=
+github.com/SaiNageswarS/go-api-boot v1.0.29/go.mod h1:Zw24q6tFlTNlrC90MAgwAXxuUFflYm5kDhow0Y9zigw=
 github.com/adrg/strutil v0.3.1/go.mod h1:8h90y18QLrs11IBffcGX3NW/GFBXCMcNg4M7H6MspPA=
 github.com/adrg/sysfont v0.1.2/go.mod h1:6d3l7/BSjX9VaeXWJt9fcrftFaD/t7l11xgSywCPZGk=
 github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=

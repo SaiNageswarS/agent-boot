@@ -22,20 +22,20 @@ import (
 
 type AgentService struct {
 	pb.UnimplementedAgentServer
-	mongo         odm.MongoClient
-	claude        *llm.AnthropicClient
-	llama         *llm.OllamaLLMClient
-	searchService *SearchService
-	ccfgg         *appconfig.AppConfig
+	mongo           odm.MongoClient
+	anthropicClient *llm.AnthropicClient
+	ollamaClient    *llm.OllamaLLMClient
+	searchService   *SearchService
+	ccfgg           *appconfig.AppConfig
 }
 
-func ProvideAgentService(mongo odm.MongoClient, claude *llm.AnthropicClient, llama *llm.OllamaLLMClient, embedder llm.Embedder, ccfgg *appconfig.AppConfig) *AgentService {
+func ProvideAgentService(mongo odm.MongoClient, anthropicClient *llm.AnthropicClient, ollamaClient *llm.OllamaLLMClient, embedder llm.Embedder, ccfgg *appconfig.AppConfig) *AgentService {
 	return &AgentService{
-		mongo:         mongo,
-		claude:        claude,
-		llama:         llama,
-		searchService: ProvideSearchService(mongo, embedder),
-		ccfgg:         ccfgg,
+		mongo:           mongo,
+		anthropicClient: anthropicClient,
+		ollamaClient:    ollamaClient,
+		searchService:   ProvideSearchService(mongo, embedder),
+		ccfgg:           ccfgg,
 	}
 }
 
@@ -83,9 +83,9 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	// 2. Extract search queries using LLM.
 	var searchQueriesTask <-chan async.Result[*prompts.ExtractSearchQueriesResponse]
 	if req.Model == "claude" {
-		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.claude, s.ccfgg.ClaudeVersion, req.Text, agentDetail.Capability)
+		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.anthropicClient, s.ccfgg.ClaudeVersion, req.Text, agentDetail.Capability)
 	} else {
-		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.llama, s.ccfgg.LlamaVersion, req.Text, agentDetail.Capability)
+		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.ollamaClient, s.ccfgg.OllamaModel, req.Text, agentDetail.Capability)
 	}
 
 	searchQueries, err := async.Await(searchQueriesTask)
@@ -162,9 +162,11 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	var answerTask <-chan async.Result[string]
 
 	if req.Model == "claude" {
-		answerTask = prompts.GenerateAnswer(ctx, s.claude, s.ccfgg.ClaudeVersion, agentDetail.Capability, req.Text, string(searchResultsJson))
+		turn.Model = s.ccfgg.ClaudeVersion
+		answerTask = prompts.GenerateAnswer(ctx, s.anthropicClient, s.ccfgg.ClaudeVersion, agentDetail.Capability, req.Text, string(searchResultsJson))
 	} else {
-		answerTask = prompts.GenerateAnswer(ctx, s.llama, s.ccfgg.LlamaVersion, agentDetail.Capability, req.Text, string(searchResultsJson))
+		turn.Model = s.ccfgg.OllamaModel
+		answerTask = prompts.GenerateAnswer(ctx, s.ollamaClient, s.ccfgg.OllamaModel, agentDetail.Capability, req.Text, string(searchResultsJson))
 	}
 
 	// Wait for search results to finish sending
@@ -182,7 +184,6 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	}
 
 	turn.AgentAnswer = answer
-	turn.Model = req.Model
 	session.Turns = append(session.Turns, turn)
 
 	async.Await(odm.CollectionOf[db.SessionModel](s.mongo, tenant).Save(ctx, *session))

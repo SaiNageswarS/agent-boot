@@ -12,4 +12,7 @@ type AppConfig struct {
 	TemporalPyTaskQueue string `ini:"temporal_py_task_queue"`
 
 	SignUpAllowed bool `ini:"sign_up_allowed"`
+
+	ClaudeVersion string `ini:"claude_version"`
+	LlamaVersion  string `ini:"llama_version"`
 }

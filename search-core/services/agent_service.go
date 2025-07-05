@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
 	"github.com/SaiNageswarS/go-api-boot/auth"
@@ -25,14 +26,16 @@ type AgentService struct {
 	claude        *llm.AnthropicClient
 	llama         *llm.OllamaLLMClient
 	searchService *SearchService
+	ccfgg         *appconfig.AppConfig
 }
 
-func ProvideAgentService(mongo odm.MongoClient, claude *llm.AnthropicClient, llama *llm.OllamaLLMClient, embedder llm.Embedder) *AgentService {
+func ProvideAgentService(mongo odm.MongoClient, claude *llm.AnthropicClient, llama *llm.OllamaLLMClient, embedder llm.Embedder, ccfgg *appconfig.AppConfig) *AgentService {
 	return &AgentService{
 		mongo:         mongo,
 		claude:        claude,
 		llama:         llama,
 		searchService: ProvideSearchService(mongo, embedder),
+		ccfgg:         ccfgg,
 	}
 }
 
@@ -80,9 +83,9 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	// 2. Extract search queries using LLM.
 	var searchQueriesTask <-chan async.Result[*prompts.ExtractSearchQueriesResponse]
 	if req.Model == "claude" {
-		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.claude, claudeVersion, req.Text, agentDetail.Capability)
+		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.claude, s.ccfgg.ClaudeVersion, req.Text, agentDetail.Capability)
 	} else {
-		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.llama, llamaVersion, req.Text, agentDetail.Capability)
+		searchQueriesTask = prompts.ExtractSearchQueries(ctx, s.llama, s.ccfgg.LlamaVersion, req.Text, agentDetail.Capability)
 	}
 
 	searchQueries, err := async.Await(searchQueriesTask)
@@ -159,9 +162,9 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	var answerTask <-chan async.Result[string]
 
 	if req.Model == "claude" {
-		answerTask = prompts.GenerateAnswer(ctx, s.claude, claudeVersion, agentDetail.Capability, req.Text, string(searchResultsJson))
+		answerTask = prompts.GenerateAnswer(ctx, s.claude, s.ccfgg.ClaudeVersion, agentDetail.Capability, req.Text, string(searchResultsJson))
 	} else {
-		answerTask = prompts.GenerateAnswer(ctx, s.llama, llamaVersion, agentDetail.Capability, req.Text, string(searchResultsJson))
+		answerTask = prompts.GenerateAnswer(ctx, s.llama, s.ccfgg.LlamaVersion, agentDetail.Capability, req.Text, string(searchResultsJson))
 	}
 
 	// Wait for search results to finish sending
@@ -304,8 +307,3 @@ func (h *streamHelper) Recover() {
 		logger.Error("Stream panic recovered", zap.Any("panic", r))
 	}
 }
-
-const (
-	claudeVersion = "claude-3-5-sonnet-20241022"
-	llamaVersion  = "llama3.1:70b"
-)

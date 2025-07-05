@@ -307,5 +307,5 @@ func (h *streamHelper) Recover() {
 
 const (
 	claudeVersion = "claude-3-5-sonnet-20241022"
-	llamaVersion  = "llama-3.2-70b-instruct"
+	llamaVersion  = "llama3.1:70b"
 )

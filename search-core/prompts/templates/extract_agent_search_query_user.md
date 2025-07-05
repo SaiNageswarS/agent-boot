@@ -9,4 +9,10 @@
 4. Generate diverse search queries combining user terms with domain expertise
 5. If not relevant, explain why and return empty queries
 
-Provide your reasoning and then the JSON output.
+Analyze the input and return your response in this exact format:
+
+RELEVANT: true/false
+REASONING: Your explanation here
+QUERIES: query1|query2|query3|query4
+
+Do not include any other text or formatting.

@@ -2,11 +2,12 @@ package prompts
 
 import (
 	"context"
-	"encoding/json"
+	"strings"
 
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-collection-boot/async"
+	"github.com/SaiNageswarS/go-collection-boot/linq"
 	"go.uber.org/zap"
 )
 
@@ -58,9 +59,37 @@ func ExtractSearchQueries(ctx context.Context, client llm.LLMClient, modelVersio
 
 		logger.Info("ExtractAgentInput response", zap.String("response", response))
 
-		out := &ExtractSearchQueriesResponse{}
-		json.Unmarshal([]byte(response), out)
-
+		out := parseResponse(response)
 		return out, nil
 	})
+}
+
+func parseResponse(responseText string) *ExtractSearchQueriesResponse {
+	lines := strings.Split(strings.TrimSpace(responseText), "\n")
+	out := &ExtractSearchQueriesResponse{}
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if after, ok := strings.CutPrefix(line, "RELEVANT:"); ok {
+			out.Relevant = strings.TrimSpace(after) == "true"
+		} else if after0, ok0 := strings.CutPrefix(line, "REASONING:"); ok0 {
+			out.Reasoning = strings.TrimSpace(after0)
+		} else if after1, ok1 := strings.CutPrefix(line, "QUERIES:"); ok1 {
+			queryStr := strings.TrimSpace(after1)
+
+			if queryStr != "" {
+				out.SearchQueries = strings.Split(queryStr, "|")
+				out.SearchQueries = linq.From(out.SearchQueries).
+					Select(func(q string) string {
+						return strings.TrimSpace(q)
+					}).
+					Where(func(q string) bool {
+						return q != ""
+					}).
+					ToSlice()
+			}
+		}
+	}
+
+	return out
 }

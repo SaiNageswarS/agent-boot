@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/SaiNageswarS/agent-boot/search-core/agent"
 	"github.com/SaiNageswarS/agent-boot/search-core/appconfig"
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
@@ -25,8 +26,8 @@ type AgentService struct {
 	mongo           odm.MongoClient
 	anthropicClient *llm.AnthropicClient
 	ollamaClient    *llm.OllamaLLMClient
-	searchService   *SearchService
 	ccfgg           *appconfig.AppConfig
+	embdder         llm.Embedder
 }
 
 func ProvideAgentService(mongo odm.MongoClient, anthropicClient *llm.AnthropicClient, ollamaClient *llm.OllamaLLMClient, embedder llm.Embedder, ccfgg *appconfig.AppConfig) *AgentService {
@@ -34,8 +35,8 @@ func ProvideAgentService(mongo odm.MongoClient, anthropicClient *llm.AnthropicCl
 		mongo:           mongo,
 		anthropicClient: anthropicClient,
 		ollamaClient:    ollamaClient,
-		searchService:   ProvideSearchService(mongo, embedder),
 		ccfgg:           ccfgg,
+		embdder:         embedder,
 	}
 }
 
@@ -115,15 +116,18 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 		return err
 	}
 
-	searchResults, err := s.searchService.Search(ctx, &pb.SearchRequest{Queries: searchQueries.SearchQueries})
+	chunkRepository := odm.CollectionOf[db.ChunkModel](s.mongo, tenant)
+	vectorRepository := odm.CollectionOf[db.ChunkAnnModel](s.mongo, tenant)
+	searchService := agent.NewSearchStep(chunkRepository, vectorRepository, s.embdder)
+	searchResults, err := searchService.Run(ctx, searchQueries.SearchQueries)
 	if err != nil {
 		logger.Error("Error performing search", zap.Error(err))
 		return sh.SendFinalError("Search service failed to process your query", "SEARCH_FAILED")
 	}
 
-	totalResults := len(searchResults.Results)
-	turn.SearchResultChunkIds = linq.Map(searchResults.Results, func(r *pb.SearchResult) string {
-		return r.ChunkId
+	totalResults := len(searchResults)
+	turn.SearchResultChunkIds = linq.Map(searchResults, func(r *db.ChunkModel) string {
+		return r.ChunkID
 	})
 
 	// Update metadata with actual results count
@@ -132,8 +136,9 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	}
 
 	// Send search results asynchronously with proper error handling
+	searchResultsProto := buildSearchResponse(searchResults)
 	sendSearchResultsTask := async.Go(func() (struct{}, error) {
-		if err = sh.SendSearchResults(ctx, searchResults.Results); err != nil {
+		if err = sh.SendSearchResults(ctx, searchResultsProto.Results); err != nil {
 			return struct{}{}, err
 		}
 
@@ -151,7 +156,7 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 		EmitUnpopulated: false,
 	}
 
-	searchResultsJson, err := marshaler.Marshal(searchResults)
+	searchResultsJson, err := marshaler.Marshal(searchResultsProto)
 	if err != nil {
 		logger.Error("Error marshaling search results", zap.Error(err))
 		// Wait for search results to finish sending before sending error

@@ -71,6 +71,7 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	result := agentFlow.
 		ExtractQueries(ctx, req.Text, agentDetail.Capability).
 		Search(ctx).
+		SummarizeContext(ctx, req.Text).
 		GenerateAnswer(ctx, req.Text, agentDetail.Capability)
 
 	// 4. Handle final result or error

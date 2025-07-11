@@ -97,8 +97,64 @@ func (af *AgentFlow) Search(ctx context.Context) *AgentFlow {
 	}
 
 	af.SearchResults = searchResults
-	af.rep.SearchResults(ctx, searchResults)
+	// af.rep.SearchResults(ctx, searchResults)
 
+	return af
+}
+
+func (af *AgentFlow) SummarizeContext(ctx context.Context, userInput string) *AgentFlow {
+	if af.Err != nil {
+		return af
+	}
+
+	if len(af.SearchResults) == 0 {
+		af.Err = errors.New("no search results found")
+		af.rep.Error(ctx, "NO_SEARCH_RESULTS", "No search results available for summarization")
+		return af
+	}
+
+	af.rep.Metadata(ctx, "summarizing_context", int32(len(af.SearchResults)), 0)
+
+	out := make([]*db.ChunkModel, 0, len(af.SearchResults))
+
+	summarizationTasks := make([]<-chan async.Result[[]string], 0, len(af.SearchResults))
+
+	// group search results by section and summarize each section
+	curChunkIdx := 0
+	for curChunkIdx < len(af.SearchResults) {
+		out = append(out, af.SearchResults[curChunkIdx]) // add the first chunk of section to output
+
+		section, _ := getSectionAndIndex(af.SearchResults[curChunkIdx])
+		sentences := af.SearchResults[curChunkIdx].Sentences
+
+		curChunkIdx++
+		for curChunkIdx < len(af.SearchResults) {
+			nextSection, _ := getSectionAndIndex(af.SearchResults[curChunkIdx])
+			if nextSection != section {
+				break
+			}
+
+			sentences = append(sentences, af.SearchResults[curChunkIdx].Sentences...)
+			curChunkIdx++
+		}
+
+		summarizationTasks = append(summarizationTasks, prompts.SummarizeContext(
+			ctx, af.llmClient, af.model, userInput, sentences))
+	}
+
+	sectionSentences, err := async.AwaitAll(summarizationTasks...)
+	if err != nil {
+		af.Err = fmt.Errorf("context summarization failed: %w", err)
+		af.rep.Error(ctx, "CONTEXT_SUMMARIZATION_FAILED", err.Error())
+		return af
+	}
+
+	for i, sentences := range sectionSentences {
+		out[i].Sentences = sentences
+	}
+
+	af.SearchResults = out
+	af.rep.SearchResults(ctx, out)
 	return af
 }
 

@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	"github.com/SaiNageswarS/go-api-boot/llm"
+	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-collection-boot/async"
+	"go.uber.org/zap"
 )
 
 func SummarizeContext(ctx context.Context, client llm.LLMClient, modelVersion, userQuery string, sentences []string) <-chan async.Result[[]string] {
@@ -36,7 +38,7 @@ func SummarizeContext(ctx context.Context, client llm.LLMClient, modelVersion, u
 			return nil
 		}, llm.WithLLMModel(modelVersion),
 			llm.WithMaxTokens(8000),
-			llm.WithTemperature(0.5),
+			llm.WithTemperature(0.2),
 			llm.WithSystemPrompt(systemPrompt),
 		)
 
@@ -44,6 +46,7 @@ func SummarizeContext(ctx context.Context, client llm.LLMClient, modelVersion, u
 			return nil, err
 		}
 
+		logger.Info("Context Summary", zap.String("response", response))
 		// Extract sentences in SUMMARY block
 		lines := strings.Split(response, "\n")
 		var summaryLines []string

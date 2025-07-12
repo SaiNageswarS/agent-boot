@@ -12,22 +12,22 @@ import (
 )
 
 type ExtractSearchQueriesResponse struct {
-	Relevant      bool     `json:"relevant"`
 	Reasoning     string   `json:"reasoning"`
 	SearchQueries []string `json:"search_queries"`
 }
 
 func ExtractSearchQueries(ctx context.Context, client llm.LLMClient, modelVersion, userInput, agentCapability string) <-chan async.Result[*ExtractSearchQueriesResponse] {
 	return async.Go(func() (*ExtractSearchQueriesResponse, error) {
-		systemPrompt, err := loadPrompt("templates/extract_agent_search_query_system.md", map[string]string{})
+		systemPrompt, err := loadPrompt("templates/extract_agent_search_query_system.md", map[string]string{
+			"AGENT_CAPABILITY": agentCapability,
+		})
 		if err != nil {
 			logger.Error("Failed to load system prompt", zap.Error(err))
 			return nil, err
 		}
 
 		userPrompt, err := loadPrompt("templates/extract_agent_search_query_user.md", map[string]string{
-			"USER_INPUT":       userInput,
-			"AGENT_CAPABILITY": agentCapability,
+			"USER_INPUT": userInput,
 		})
 		if err != nil {
 			return nil, err
@@ -70,9 +70,7 @@ func parseResponse(responseText string) *ExtractSearchQueriesResponse {
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if after, ok := strings.CutPrefix(line, "RELEVANT:"); ok {
-			out.Relevant = strings.TrimSpace(after) == "true"
-		} else if after0, ok0 := strings.CutPrefix(line, "REASONING:"); ok0 {
+		if after0, ok0 := strings.CutPrefix(line, "REASONING:"); ok0 {
 			out.Reasoning = strings.TrimSpace(after0)
 		} else if after1, ok1 := strings.CutPrefix(line, "QUERIES:"); ok1 {
 			queryStr := strings.TrimSpace(after1)

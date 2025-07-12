@@ -5,20 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
 	"github.com/SaiNageswarS/go-api-boot/llm"
+	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
+	"go.uber.org/zap"
 )
 
 type Reporter interface {
 	Metadata(ctx context.Context, status string, estQueries, estResults int32)
 	Queries(ctx context.Context, q []string)
-	SearchResults(ctx context.Context, res []*db.ChunkModel)
+	SearchResults(ctx context.Context, res *db.ChunkModel, citationIdx, totalChunks int, isFinal bool)
 	Answer(ctx context.Context, ans string)
-	NotRelevant(ctx context.Context, reason string, q []string)
 	Error(ctx context.Context, code, msg string)
 }
 
@@ -28,7 +31,6 @@ type AgentFlow struct {
 
 	embedder  llm.Embedder
 	llmClient llm.LLMClient
-	model     string
 	rep       Reporter
 
 	// agent flow outputs
@@ -38,10 +40,9 @@ type AgentFlow struct {
 	Answer        string
 }
 
-func New(llmClient llm.LLMClient, model string, rep Reporter, embedder llm.Embedder, chunkRepo odm.OdmCollectionInterface[db.ChunkModel], vectorRepo odm.OdmCollectionInterface[db.ChunkAnnModel]) *AgentFlow {
+func New(llmClient llm.LLMClient, rep Reporter, embedder llm.Embedder, chunkRepo odm.OdmCollectionInterface[db.ChunkModel], vectorRepo odm.OdmCollectionInterface[db.ChunkAnnModel]) *AgentFlow {
 	return &AgentFlow{
 		llmClient:  llmClient,
-		model:      model,
 		rep:        rep,
 		chunkRepo:  chunkRepo,
 		vectorRepo: vectorRepo,
@@ -49,24 +50,18 @@ func New(llmClient llm.LLMClient, model string, rep Reporter, embedder llm.Embed
 	}
 }
 
-func (af *AgentFlow) ExtractQueries(ctx context.Context, userInput, agentCapability string) *AgentFlow {
+func (af *AgentFlow) ExtractQueries(ctx context.Context, model, userInput, agentCapability string) *AgentFlow {
 	if af.Err != nil {
 		return af
 	}
 
 	af.rep.Metadata(ctx, "extract_search_queries", 0, 0)
 	resp, err := async.Await(
-		prompts.ExtractSearchQueries(ctx, af.llmClient, af.model, userInput, agentCapability),
+		prompts.ExtractSearchQueries(ctx, af.llmClient, model, userInput, agentCapability),
 	)
 	if err != nil {
 		af.Err = fmt.Errorf("input extraction failed: %w", err)
 		af.rep.Error(ctx, "INPUT_EXTRACTION_FAILED", err.Error())
-		return af
-	}
-
-	if !resp.Relevant {
-		af.Err = errors.New("input_not_relevant")
-		af.rep.NotRelevant(ctx, resp.Reasoning, resp.SearchQueries)
 		return af
 	}
 
@@ -96,17 +91,17 @@ func (af *AgentFlow) Search(ctx context.Context) *AgentFlow {
 		return af
 	}
 
+	logger.Info("Search completed", zap.Int("total_results", len(searchResults)))
 	af.SearchResults = searchResults
 	// af.rep.SearchResults(ctx, searchResults)
 
 	return af
 }
 
-func (af *AgentFlow) SummarizeContext(ctx context.Context, userInput string) *AgentFlow {
+func (af *AgentFlow) SummarizeContext(ctx context.Context, model, userInput string) *AgentFlow {
 	if af.Err != nil {
 		return af
 	}
-
 	if len(af.SearchResults) == 0 {
 		af.Err = errors.New("no search results found")
 		af.rep.Error(ctx, "NO_SEARCH_RESULTS", "No search results available for summarization")
@@ -115,50 +110,84 @@ func (af *AgentFlow) SummarizeContext(ctx context.Context, userInput string) *Ag
 
 	af.rep.Metadata(ctx, "summarizing_context", int32(len(af.SearchResults)), 0)
 
-	out := make([]*db.ChunkModel, 0, len(af.SearchResults))
+	// ── 1. group consecutive chunks by section ──────────────────────────────
+	type sectionJob struct {
+		head      *db.ChunkModel
+		sentences []string
+	}
+	jobs := make([]sectionJob, 0)
 
-	summarizationTasks := make([]<-chan async.Result[[]string], 0, len(af.SearchResults))
+	for i := 0; i < len(af.SearchResults); {
+		head := af.SearchResults[i]
+		section, _ := getSectionAndIndex(head)
 
-	// group search results by section and summarize each section
-	curChunkIdx := 0
-	for curChunkIdx < len(af.SearchResults) {
-		out = append(out, af.SearchResults[curChunkIdx]) // add the first chunk of section to output
-
-		section, _ := getSectionAndIndex(af.SearchResults[curChunkIdx])
-		sentences := af.SearchResults[curChunkIdx].Sentences
-
-		curChunkIdx++
-		for curChunkIdx < len(af.SearchResults) {
-			nextSection, _ := getSectionAndIndex(af.SearchResults[curChunkIdx])
-			if nextSection != section {
+		buf := append([]string(nil), head.Sentences...)
+		j := i + 1
+		for j < len(af.SearchResults) {
+			if s, _ := getSectionAndIndex(af.SearchResults[j]); s != section {
 				break
 			}
-
-			sentences = append(sentences, af.SearchResults[curChunkIdx].Sentences...)
-			curChunkIdx++
+			buf = append(buf, af.SearchResults[j].Sentences...)
+			j++
 		}
-
-		summarizationTasks = append(summarizationTasks, prompts.SummarizeContext(
-			ctx, af.llmClient, af.model, userInput, sentences))
+		jobs = append(jobs, sectionJob{head: head, sentences: buf})
+		i = j
 	}
 
-	sectionSentences, err := async.AwaitAll(summarizationTasks...)
-	if err != nil {
-		af.Err = fmt.Errorf("context summarization failed: %w", err)
-		af.rep.Error(ctx, "CONTEXT_SUMMARIZATION_FAILED", err.Error())
-		return af
+	logger.Info("[Context Summarization] Grouped sections", zap.Int("total_sections", len(jobs)))
+
+	// ── 2. parallel summarisation & immediate streaming ─────────────────────
+	var wg sync.WaitGroup
+	var streamMu sync.Mutex
+
+	var citation int32            // 1-based, only for streamed items
+	remaining := int32(len(jobs)) // decremented for every finished job
+
+	for _, job := range jobs {
+		wg.Add(1)
+		go func(j sectionJob) {
+			defer wg.Done()
+
+			summary, err := async.Await(
+				prompts.SummarizeContext(ctx, af.llmClient, model, userInput, j.sentences),
+			)
+
+			// decide whether to keep this section
+			if err != nil || len(summary) == 0 {
+				atomic.AddInt32(&remaining, -1) // skipped
+				return                          // nothing streamed
+			}
+
+			j.head.Sentences = summary
+
+			// ── critical section: write to stream ──────────────────────────
+			streamMu.Lock()
+			idx := atomic.AddInt32(&citation, 1) // assign citation #
+			last := atomic.AddInt32(&remaining, -1) == 0
+			af.rep.SearchResults(ctx, j.head, int(idx), len(af.SearchResults), last)
+			streamMu.Unlock()
+		}(job)
 	}
 
-	for i, sentences := range sectionSentences {
-		out[i].Sentences = sentences
+	wg.Wait()
+
+	// collect only the sections that were summarised & streamed
+	out := make([]*db.ChunkModel, 0, citation)
+	for _, j := range jobs {
+		if len(j.head.Sentences) > 0 && j.head != nil {
+			out = append(out, j.head)
+		}
 	}
+
+	logger.Info("Context summarization completed",
+		zap.Int("total_sections_kept", len(out)),
+		zap.Int("total_sections_skipped", len(jobs)-len(out)))
 
 	af.SearchResults = out
-	af.rep.SearchResults(ctx, out)
 	return af
 }
 
-func (af *AgentFlow) GenerateAnswer(ctx context.Context, userInput, agentCapability string) *AgentFlow {
+func (af *AgentFlow) GenerateAnswer(ctx context.Context, model, userInput, agentCapability string) *AgentFlow {
 	if af.Err != nil {
 		return af
 	}
@@ -179,7 +208,7 @@ func (af *AgentFlow) GenerateAnswer(ctx context.Context, userInput, agentCapabil
 	}
 
 	answer, err := async.Await(
-		prompts.GenerateAnswer(ctx, af.llmClient, af.model, agentCapability, userInput, string(searchResultsJson)),
+		prompts.GenerateAnswer(ctx, af.llmClient, model, agentCapability, userInput, string(searchResultsJson)),
 	)
 
 	if err != nil {

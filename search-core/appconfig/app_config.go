@@ -13,6 +13,8 @@ type AppConfig struct {
 
 	SignUpAllowed bool `ini:"sign_up_allowed"`
 
-	ClaudeVersion string `ini:"claude_version"`
-	OllamaModel   string `ini:"ollama_model"`
+	ClaudeVersion   string `ini:"claude_version"`
+	ClaudeMini      string `ini:"claude_mini"`
+	OllamaModel     string `ini:"ollama_model"`
+	OllamaMiniModel string `ini:"ollama_mini_model"`
 }

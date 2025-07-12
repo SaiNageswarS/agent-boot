@@ -63,16 +63,16 @@ func (s *AgentService) CallAgent(req *pb.AgentInput, stream grpc.ServerStreaming
 	chunkRepository := odm.CollectionOf[db.ChunkModel](s.mongo, tenant)
 	vectorRepository := odm.CollectionOf[db.ChunkAnnModel](s.mongo, tenant)
 
-	llmClient, model := s.getLLMClientAndModel(req.Model)
+	llmClient, model, miniModel := s.getLLMClientAndModel(req.Model)
 
-	agentFlow := agent.New(llmClient, model, sh, s.embdder, chunkRepository, vectorRepository)
+	agentFlow := agent.New(llmClient, sh, s.embdder, chunkRepository, vectorRepository)
 
 	// 3. Execute AgentFlow pipeline
 	result := agentFlow.
-		ExtractQueries(ctx, req.Text, agentDetail.Capability).
+		ExtractQueries(ctx, miniModel, req.Text, agentDetail.Capability).
 		Search(ctx).
-		SummarizeContext(ctx, req.Text).
-		GenerateAnswer(ctx, req.Text, agentDetail.Capability)
+		SummarizeContext(ctx, miniModel, req.Text).
+		GenerateAnswer(ctx, model, req.Text, agentDetail.Capability)
 
 	// 4. Handle final result or error
 	if result.Err != nil {
@@ -139,18 +139,12 @@ func (s *AgentService) saveSession(ctx context.Context, result *agent.AgentFlow,
 	async.Await(odm.CollectionOf[db.SessionModel](s.mongo, tenant).Save(ctx, *session))
 }
 
-func (s *AgentService) getLLMClientAndModel(m string) (llm.LLMClient, string) {
-	var llmClient llm.LLMClient
-	var modelVersion string
+func (s *AgentService) getLLMClientAndModel(m string) (llm.LLMClient, string, string) {
 	if m == "claude" {
-		llmClient = s.anthropicClient
-		modelVersion = s.ccfgg.ClaudeVersion
+		return s.anthropicClient, s.ccfgg.ClaudeVersion, s.ccfgg.ClaudeMini
 	} else {
-		llmClient = s.ollamaClient
-		modelVersion = s.ccfgg.OllamaModel
+		return s.ollamaClient, s.ccfgg.OllamaModel, s.ccfgg.OllamaMiniModel
 	}
-
-	return llmClient, modelVersion
 }
 
 type streamHelper struct {
@@ -194,27 +188,30 @@ func (h *streamHelper) Queries(ctx context.Context, q []string) {
 	})
 }
 
-func (h *streamHelper) SearchResults(ctx context.Context, res []*db.ChunkModel) {
+func (h *streamHelper) SearchResults(ctx context.Context, doc *db.ChunkModel, citationIdx, totalChunks int, isFinal bool) {
 	// Convert to proto format
-	searchResultsProto := buildSearchResponse(res)
-	h.sendSearchResults(ctx, searchResultsProto.Results)
+	searchResultProto := &pb.SearchResult{
+		Sentences:     doc.Sentences,
+		Title:         doc.Title,
+		SectionPath:   doc.SectionPath,
+		Source:        doc.SourceURI,
+		URL:           doc.SourceURI,
+		CitationIndex: int32(citationIdx),
+		ChunkId:       doc.ChunkID,
+	}
+
+	h.send(&pb.AgentStreamChunk{
+		ChunkType: &pb.AgentStreamChunk_SearchResults{SearchResults: &pb.SearchResultsChunk{
+			Results: []*pb.SearchResult{searchResultProto}, ChunkIndex: int32(citationIdx), TotalChunks: int32(totalChunks),
+			IsFinalChunk: isFinal,
+		}},
+	})
 }
 
 func (h *streamHelper) Answer(ctx context.Context, ans string) {
 	h.send(&pb.AgentStreamChunk{
 		ChunkType: &pb.AgentStreamChunk_Answer{Answer: &pb.AnswerChunk{
 			Content: ans,
-			IsFinal: true,
-		}},
-	})
-}
-
-func (h *streamHelper) NotRelevant(ctx context.Context, reason string, q []string) {
-	// Send not relevant reasoning as answer
-	content := fmt.Sprintf("I'm not able to help with this request. %s", reason)
-	h.send(&pb.AgentStreamChunk{
-		ChunkType: &pb.AgentStreamChunk_Answer{Answer: &pb.AnswerChunk{
-			Content: content,
 			IsFinal: true,
 		}},
 	})
@@ -230,43 +227,6 @@ func (h *streamHelper) Error(ctx context.Context, code, msg string) {
 }
 
 // Non-Reporter methods
-func (h *streamHelper) sendSearchResults(ctx context.Context, res []*pb.SearchResult) {
-	h.wg.Add(1)
-
-	go func() {
-		defer h.wg.Done()
-
-		const batchSize = 10
-		if len(res) == 0 {
-			h.send(&pb.AgentStreamChunk{
-				ChunkType: &pb.AgentStreamChunk_SearchResults{SearchResults: &pb.SearchResultsChunk{
-					Results: []*pb.SearchResult{}, ChunkIndex: 0, TotalChunks: 1, IsFinalChunk: true,
-				}},
-			})
-			return
-		}
-
-		total := len(res)
-		chunks := (total + batchSize - 1) / batchSize
-
-		// send search results in batches
-		for i := 0; i < total; i += batchSize {
-			if ctx.Err() != nil {
-				logger.Error("Context cancelled while sending search results", zap.Error(ctx.Err()))
-				return
-			}
-
-			end := min(i+batchSize, total)
-			h.send(&pb.AgentStreamChunk{
-				ChunkType: &pb.AgentStreamChunk_SearchResults{SearchResults: &pb.SearchResultsChunk{
-					Results: res[i:end], ChunkIndex: int32(i / batchSize), TotalChunks: int32(chunks),
-					IsFinalChunk: end == total,
-				}},
-			})
-		}
-	}()
-}
-
 func (h *streamHelper) sendComplete(status string, totalResults, totalQueries int) {
 	h.send(&pb.AgentStreamChunk{
 		ChunkType: &pb.AgentStreamChunk_Complete{Complete: &pb.StreamComplete{

@@ -1,17 +1,13 @@
 **User Input**: {{.USER_INPUT}}
-**Agent Capability**: {{.AGENT_CAPABILITY}}
 
 **Think through this step by step:**
 
-1. First, determine if the user input is relevant to the agent capability
-2. If relevant, extract key concepts and terms from the input
-3. Reason about what information would be needed to answer the question
-4. Generate diverse search queries combining user terms with domain expertise
-5. If not relevant, explain why and return empty queries
+1. Extract key terms and entities.
+2. Decide what supporting information is required.
+3. Craft 3-5 complementary search queries.
 
 Analyze the input and return your response in this exact format:
 
-RELEVANT: true/false
 REASONING: Your explanation here
 QUERIES: query1|query2|query3|query4
 

@@ -63,13 +63,13 @@ func buildSearchResponse(docs []*db.ChunkModel) *pb.SearchResponse {
 
 	for idx, doc := range docs {
 		out = append(out, &pb.SearchResult{
-			Sentences:   doc.Sentences,
-			Title:       doc.Title,
-			SectionPath: doc.SectionPath,
-			Source:      doc.SourceURI,
-			URL:         doc.SourceURI,
-			DocIndex:    int32(idx + 1),
-			ChunkId:     doc.ChunkID,
+			Sentences:     doc.Sentences,
+			Title:         doc.Title,
+			SectionPath:   doc.SectionPath,
+			Source:        doc.SourceURI,
+			URL:           doc.SourceURI,
+			CitationIndex: int32(idx + 1),
+			ChunkId:       doc.ChunkID,
 		})
 	}
 

@@ -19,7 +19,7 @@ message SearchResponse {
 }
 
 message SearchResult {
-    int32 docIndex = 1;
+    int32 citationIndex = 1;
     string sectionPath = 2;
     repeated string sentences = 3;
     string source = 4;

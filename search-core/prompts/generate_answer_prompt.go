@@ -2,6 +2,8 @@ package prompts
 
 import (
 	"context"
+	"regexp"
+	"strings"
 
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
@@ -41,6 +43,28 @@ func GenerateAnswer(ctx context.Context, client llm.LLMClient, modelVersion, age
 			llm.WithSystemPrompt(systemPrompt),
 		)
 
-		return response, err
+		return formatThinkToMd(response), err
+	})
+}
+
+func formatThinkToMd(md string) string {
+	if !strings.Contains(md, "<think>") {
+		return md // fast-path: no tag to process
+	}
+
+	re := regexp.MustCompile(`(?s)<think>(.*?)</think>`)
+
+	return re.ReplaceAllStringFunc(md, func(match string) string {
+		inner := re.FindStringSubmatch(match)[1]
+		inner = strings.TrimSpace(inner)
+
+		// Prefix each line with "> "
+		lines := strings.Split(inner, "\n")
+		for i, line := range lines {
+			lines[i] = "> " + line
+		}
+
+		return "\n> **Chain-of-thought**\n>\n" +
+			strings.Join(lines, "\n") + "\n"
 	})
 }

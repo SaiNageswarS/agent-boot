@@ -6,8 +6,17 @@ INPUT FIELDS
 3. excerpt          : first ~800 characters of the section body.
 
 TASK
-Craft a NEW noun-phrase title that captures the main topic of the section.  
+1. Think step-by-step in the THOUGHTS block.
+2. In TITLE block output a NEW noun-phrase title that captures the main topic of the section.  
    • 4–10 words, ≤ 65 characters.  
    • Use terminology found in excerpt or doc_title for disambiguation, but **do not copy doc_title wholesale**.  
    • Avoid verbs, punctuation (except commas), or leading/trailing spaces.  
    • Output exactly ONE line: the chosen title—nothing else.
+
+OUTPUT FORMAT (verbatim)
+========================
+THOUGHTS:
+<your reasoning here>
+
+TITLE:
+<your concise title here>

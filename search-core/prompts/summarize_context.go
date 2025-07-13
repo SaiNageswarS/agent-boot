@@ -48,23 +48,7 @@ func SummarizeContext(ctx context.Context, client llm.LLMClient, modelVersion, u
 
 		logger.Info("Context Summary", zap.String("response", response))
 		// Extract sentences in SUMMARY block
-		lines := strings.Split(response, "\n")
-		var summaryLines []string
-		inSummary := false
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "SUMMARY:") {
-				inSummary = true
-				continue
-			}
-			if inSummary {
-				if line == "" || strings.HasPrefix(line, "THOUGHTS:") {
-					break // End of SUMMARY block
-				}
-				summaryLines = append(summaryLines, line)
-			}
-		}
-
+		summaryLines := extractSection(response, "SUMMARY:")
 		return summaryLines, nil
 	})
 }

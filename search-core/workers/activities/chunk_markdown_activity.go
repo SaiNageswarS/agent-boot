@@ -62,7 +62,7 @@ func chunkMarkdownSections(ctx context.Context, ollama *llm.OllamaLLMClient, sou
 
 		// Generate a concise title for the section using LLM
 		title, err := async.Await(prompts.GenerateSectionTitle(ctx, ollama, sourceUri, sec.path[len(sec.path)-1], sec.body))
-		if err != nil {
+		if err != nil || len(title) > 100 {
 			logger.Error("Failed to generate section title", zap.Error(err))
 			title = sec.path[len(sec.path)-1] // fallback to last path segment
 		}

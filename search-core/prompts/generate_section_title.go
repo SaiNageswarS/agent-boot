@@ -2,6 +2,7 @@ package prompts
 
 import (
 	"context"
+	"strings"
 
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
@@ -46,6 +47,14 @@ func GenerateSectionTitle(ctx context.Context, client *llm.OllamaLLMClient, docT
 			llm.WithSystemPrompt(systemPrompt),
 		)
 
-		return response, err
+		if err != nil {
+			return "", err
+		}
+
+		// Extract title from the TITLE block
+		titleLines := extractSection(response, "TITLE:")
+		title := strings.TrimSpace(strings.Join(titleLines, " "))
+
+		return title, err
 	})
 }

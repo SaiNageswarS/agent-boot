@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func GenerateTitle(ctx context.Context, client llm.LLMClient, introDocSnippet string) <-chan async.Result[string] {
+func GenerateSectionTitle(ctx context.Context, client *llm.OllamaLLMClient, docTitle, originalSectionHeader, sectionSnippet string) <-chan async.Result[string] {
 	return async.Go(func() (string, error) {
 		systemPrompt, err := loadPrompt("templates/generate_title_system.md", map[string]string{})
 		if err != nil {
@@ -18,7 +18,9 @@ func GenerateTitle(ctx context.Context, client llm.LLMClient, introDocSnippet st
 		}
 
 		userPrompt, err := loadPrompt("templates/generate_title_user.md", map[string]string{
-			"DOCUMENT_SNIPPET": introDocSnippet,
+			"DOCUMENT_TITLE":   docTitle,
+			"DOCUMENT_SNIPPET": sectionSnippet,
+			"ORIGINAL_HEADING": originalSectionHeader,
 		})
 		if err != nil {
 			logger.Error("Failed to load user prompt", zap.Error(err))
@@ -38,7 +40,7 @@ func GenerateTitle(ctx context.Context, client llm.LLMClient, introDocSnippet st
 			response += chunk
 			return nil
 		},
-			llm.WithLLMModel("claude-3-5-haiku-20241022"),
+			llm.WithLLMModel("llama3.2:3b"),
 			llm.WithMaxTokens(4000),
 			llm.WithTemperature(0.2),
 			llm.WithSystemPrompt(systemPrompt),

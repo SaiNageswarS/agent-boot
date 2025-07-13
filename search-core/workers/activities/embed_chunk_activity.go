@@ -79,7 +79,7 @@ func (s *Activities) EmbedChunks(ctx context.Context, tenant string, chunkIds []
 		}
 
 		// Embed the chunk using the LLM client
-		embeddingText := chunkModel.Title + "\n" + chunkModel.SectionPath + "\n" + strings.Join(chunkModel.Sentences, "\n")
+		embeddingText := chunkModel.SectionPath + "\n" + strings.Join(chunkModel.Sentences, "\n")
 
 		embeddings, err := async.Await(s.embedder.GetEmbedding(ctx, embeddingText, llm.WithTask("retrieval.passage")))
 		if err != nil {

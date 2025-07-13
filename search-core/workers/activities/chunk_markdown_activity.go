@@ -30,7 +30,7 @@ func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markd
 	}
 
 	// Chunk the Markdown file
-	chunks, err := chunkMarkdownSections(ctx, s.claude, sourceUri, markDownBytes)
+	chunks, err := chunkMarkdownSections(ctx, s.ollama, sourceUri, markDownBytes)
 	if err != nil {
 		return []string{}, errors.New("failed to chunk PDF file: " + err.Error())
 	}
@@ -49,28 +49,23 @@ func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markd
 	return sectionChunkPaths, nil
 }
 
-func chunkMarkdownSections(ctx context.Context, claude *llm.AnthropicClient, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
-	maxIntroBytes := min(2500, len(markdown)) // Limit intro snippet to 1000 bytes or less
-	titleResultChan := prompts.GenerateTitle(ctx, claude, string(markdown[0:maxIntroBytes]))
-
+func chunkMarkdownSections(ctx context.Context, ollama *llm.OllamaLLMClient, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
 	sections, err := parseMarkdownSections(markdown, minSectionBytes)
 	if err != nil {
 		logger.Error("Failed to parse markdown sections", zap.Error(err))
 		return nil, err
 	}
 
-	// Wait for title generation
-	title, err := async.Await(titleResultChan)
-	logger.Info("Title generated", zap.String("title", title))
-
-	if err != nil {
-		logger.Error("Failed to generate title", zap.Error(err))
-		return nil, err
-	}
-
 	var out []db.ChunkModel
 	for idx, sec := range sections {
 		secHash, _ := odm.HashedKey(sec.body)
+
+		// Generate a concise title for the section using LLM
+		title, err := async.Await(prompts.GenerateSectionTitle(ctx, ollama, sourceUri, sec.path[len(sec.path)-1], sec.body))
+		if err != nil {
+			logger.Error("Failed to generate section title", zap.Error(err))
+			title = sec.path[len(sec.path)-1] // fallback to last path segment
+		}
 
 		secChunk := db.ChunkModel{
 			ChunkID:      secHash,

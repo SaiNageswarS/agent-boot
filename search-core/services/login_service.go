@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 
 	pb "agent-boot/proto/generated"
 
@@ -36,6 +37,7 @@ func (u *LoginService) AuthFuncOverride(ctx context.Context, fullMethodName stri
 }
 
 func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.AuthResponse, error) {
+	req.Tenant = strings.TrimSpace(req.Tenant)
 	loginInfo, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Tenant).FindOneByID(ctx,
 		db.NewLoginModel(req.Email).Id()))
 	if err != nil || loginInfo == nil {

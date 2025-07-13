@@ -17,17 +17,17 @@ type Activities struct {
 	az   cloud.Cloud
 
 	embedder llm.Embedder
-	claude   *llm.AnthropicClient
+	ollama   *llm.OllamaLLMClient
 
 	mongo odm.MongoClient
 }
 
-func ProvideActivities(ccfg *appconfig.AppConfig, az cloud.Cloud, embedder llm.Embedder, claude *llm.AnthropicClient, mongo odm.MongoClient) *Activities {
+func ProvideActivities(ccfg *appconfig.AppConfig, az cloud.Cloud, embedder llm.Embedder, ollama *llm.OllamaLLMClient, mongo odm.MongoClient) *Activities {
 	return &Activities{
 		ccfg:     ccfg,
 		az:       az,
 		embedder: embedder,
-		claude:   claude,
+		ollama:   ollama,
 		mongo:    mongo,
 	}
 }

@@ -1,9 +1,10 @@
 import logging
 import gc
+from collections.abc import Iterator
+
 import spacy
 import tiktoken
 from workers.indexer_types import Chunk
-from collections.abc import Iterator
 
 # Set up logging
 logging.basicConfig(

@@ -65,7 +65,7 @@ jobs:
         run: pip install pylint
 
       - name: Run pylint on pySideCar
-        run: pylint pySideCar --disable=missing-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,too-many-instance-attributes,logging-fstring-interpolation,trailing-whitespace
+        run: pylint pySideCar --extension-pkg-allow-list=orjson --disable=missing-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,too-many-instance-attributes,logging-fstring-interpolation,trailing-whitespace
 
       - name: Package Python Temporal worker (pySideCar)
         run: |

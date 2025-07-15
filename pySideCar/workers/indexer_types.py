@@ -21,7 +21,7 @@ class Chunk:
         return orjson.dumps(
             self,
             option=orjson.OPT_SERIALIZE_DATACLASS,
-        )  # pylint: disable=no-member,unexpected-keyword-arg
+        ) 
 
 
 def parse_section_chunk_file(file_path: str) -> Chunk:

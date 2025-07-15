@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func GenerateSectionTitle(ctx context.Context, client *llm.OllamaLLMClient, docTitle, originalSectionHeader, sectionSnippet string) <-chan async.Result[string] {
+func GenerateSectionTitle(ctx context.Context, client *llm.OllamaLLMClient, docTitle, originalSectionHeader, sectionSnippet, model string) <-chan async.Result[string] {
 	return async.Go(func() (string, error) {
 		systemPrompt, err := loadPrompt("templates/generate_title_system.md", map[string]string{})
 		if err != nil {
@@ -41,7 +41,7 @@ func GenerateSectionTitle(ctx context.Context, client *llm.OllamaLLMClient, docT
 			response += chunk
 			return nil
 		},
-			llm.WithLLMModel("llama3.2:3b"),
+			llm.WithLLMModel(model),
 			llm.WithMaxTokens(4000),
 			llm.WithTemperature(0.2),
 			llm.WithSystemPrompt(systemPrompt),

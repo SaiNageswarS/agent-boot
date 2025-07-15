@@ -30,7 +30,7 @@ func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markd
 	}
 
 	// Chunk the Markdown file
-	chunks, err := chunkMarkdownSections(ctx, s.ollama, sourceUri, markDownBytes)
+	chunks, err := chunkMarkdownSections(ctx, s.ollama, sourceUri, s.ccfg.TitleGenModel, markDownBytes)
 	if err != nil {
 		return []string{}, errors.New("failed to chunk PDF file: " + err.Error())
 	}
@@ -49,7 +49,7 @@ func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markd
 	return sectionChunkPaths, nil
 }
 
-func chunkMarkdownSections(ctx context.Context, ollama *llm.OllamaLLMClient, sourceUri string, markdown []byte) ([]db.ChunkModel, error) {
+func chunkMarkdownSections(ctx context.Context, ollama *llm.OllamaLLMClient, sourceUri, titleGenModel string, markdown []byte) ([]db.ChunkModel, error) {
 	sections, err := parseMarkdownSections(markdown, minSectionBytes)
 	if err != nil {
 		logger.Error("Failed to parse markdown sections", zap.Error(err))
@@ -61,7 +61,7 @@ func chunkMarkdownSections(ctx context.Context, ollama *llm.OllamaLLMClient, sou
 		secHash, _ := odm.HashedKey(sec.body)
 
 		// Generate a concise title for the section using LLM
-		title, err := async.Await(prompts.GenerateSectionTitle(ctx, ollama, sourceUri, sec.path[len(sec.path)-1], sec.body))
+		title, err := async.Await(prompts.GenerateSectionTitle(ctx, ollama, sourceUri, sec.path[len(sec.path)-1], sec.body, titleGenModel))
 		if err != nil || len(title) > 100 {
 			logger.Error("Failed to generate section title", zap.Error(err))
 			title = sec.path[len(sec.path)-1] // fallback to last path segment

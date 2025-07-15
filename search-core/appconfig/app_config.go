@@ -17,4 +17,6 @@ type AppConfig struct {
 	ClaudeMini      string `ini:"claude_mini"`
 	OllamaModel     string `ini:"ollama_model"`
 	OllamaMiniModel string `ini:"ollama_mini_model"`
+
+	TitleGenModel string `ini:"title_gen_model"`
 }

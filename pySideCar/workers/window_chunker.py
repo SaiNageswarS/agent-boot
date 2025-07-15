@@ -46,11 +46,11 @@ class WindowChunker:
             len(section_chunk.sentences[0])
         )
         
-        sentences = self.__split_sentences__(section_chunk.sentences[0])
+        sentences = self._split_sentences(section_chunk.sentences[0])
         logger.info(
             f"Found {len(sentences)} sentences in section chunk: {section_chunk.chunkId}."
         )
-        sent_tok_lens = [self.__count_tokens__(sent) for sent in sentences]
+        sent_tok_lens = [self._count_tokens(sent) for sent in sentences]
 
         start_sent = 0
         w_idx = 0
@@ -103,7 +103,7 @@ class WindowChunker:
 
         gc.collect()
 
-    def __count_tokens__(self, text: str) -> int:
+    def _count_tokens(self, text: str) -> int:
         """
         Counts the number of tokens in a given text using the tiktoken encoding.
 
@@ -115,7 +115,7 @@ class WindowChunker:
         """
         return len(self.encoding.encode(text)) if text else 0
 
-    def __split_sentences__(self, text: str) -> list[str]:
+    def _split_sentences(self, text: str) -> list[str]:
         """
         Splits a text into sentences using the spaCy sentencizer.
 

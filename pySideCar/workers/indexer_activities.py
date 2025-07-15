@@ -1,10 +1,11 @@
 import logging
-from dataclasses import asdict
+from typing import Optional
+
 from temporalio import activity
 
 from azure_storage import AzureStorage
 
-from workers.indexer_types import parse_section_chunk_file
+from workers.indexer_types import parse_section_chunk_file, Chunk
 from workers.window_chunker import WindowChunker
 
 # Set up logging
@@ -74,10 +75,8 @@ class IndexerActivities:
             f"Processing {len(md_section_json_urls)} Markdown sections for tenant {tenant}"
         )
 
-        # Convert JSON string to list of sections
-        import json
-
-        result = []
+        result = []     # chunk blob paths
+        previous_last_chunk: Optional[Chunk] = None
 
         for idx, md_section_json_url in enumerate(md_section_json_urls):
             md_section_json_file = self._azure_storage.download_file(
@@ -86,17 +85,34 @@ class IndexerActivities:
             md_section = parse_section_chunk_file(md_section_json_file)
 
             # Process the sections into windowed chunks
-            window_chunks = self.window_chunker.chunk_windows(md_section)
+            for window_chunk in self.window_chunker.chunk_windows(md_section):
+                if previous_last_chunk is not None:
+                    # Link the previous chunk to the current one
+                    previous_last_chunk.nextChunkId = window_chunk.chunkId
+                    window_chunk.prevChunkId = previous_last_chunk.chunkId
 
-            for window_chunk in window_chunks:
-                window_chunk_json = json.dumps(asdict(window_chunk))
-                blob_path = f"{windows_output_path}/{window_chunk.chunkId}.chunk.json"
-                self._azure_storage.upload_bytes(
-                    tenant, blob_path, window_chunk_json.encode("utf-8")
-                )
+                    # Upload the previous chunk to Azure Blob Storage
+                    blob_path = f"{windows_output_path}/{previous_last_chunk.chunkId}.chunk.json"
+                    self._azure_storage.upload_bytes(
+                        tenant, blob_path, previous_last_chunk.to_json_bytes()
+                    )
 
-                result.append(blob_path)
+                    result.append(blob_path)
 
+                # Update the previous chunk to the current one
+                previous_last_chunk = window_chunk
+            
             activity.heartbeat({"progress": f"{idx+1}/{len(md_section_json_urls)}"})
+            logger.info(
+                f"Processed section {idx + 1}/{len(md_section_json_urls)}: {md_section.chunkId}"
+            )
+
+        # Handle the last chunk
+        if previous_last_chunk is not None:
+            blob_path = f"{windows_output_path}/{previous_last_chunk.chunkId}.chunk.json"
+            self._azure_storage.upload_bytes(
+                tenant, blob_path, previous_last_chunk.to_json_bytes()
+            )
+            result.append(blob_path)
 
         return result

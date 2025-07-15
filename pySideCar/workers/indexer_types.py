@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Dict
 from typing import Optional
+import orjson
 
 
 @dataclass
@@ -11,8 +12,16 @@ class Chunk:
     sectionIndex: int  # Index of the section in the path
     sourceUri: str  # e.g., "file://path/to/file.pdf"
     sentences: List[str]  # The actual content of the chunk
+    prevChunkId: str 
+    nextChunkId: str
     tags: Optional[List[str]] = None  # Optional tags for the chunk
     abbrevations: Optional[Dict[str, str]] = None  # Optional abbreviations mapping
+
+    def to_json_bytes(self) -> bytes:
+        return orjson.dumps(
+            self,
+            option=orjson.OPT_SERIALIZE_DATACLASS,
+        )  # pylint: disable=no-member,unexpected-keyword-arg
 
 
 def parse_section_chunk_file(file_path: str) -> Chunk:

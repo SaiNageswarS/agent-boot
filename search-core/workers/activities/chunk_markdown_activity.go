@@ -76,6 +76,12 @@ func chunkMarkdownSections(ctx context.Context, ollama *llm.OllamaLLMClient, sou
 			Sentences:    []string{sec.body},
 		}
 
+		if idx > 0 {
+			// Set the previous chunk ID for all but the first section
+			secChunk.PrevChunkID = out[idx-1].ChunkID
+			out[idx-1].NextChunkID = secChunk.ChunkID // link previous chunk to current
+		}
+
 		out = append(out, secChunk)
 	}
 

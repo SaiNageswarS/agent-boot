@@ -17,6 +17,8 @@ type ChunkModel struct {
 	Tags         []string          `json:"tags" bson:"tags"`                 // Tags associated with the chunk
 	Abbrevations map[string]string `json:"abbrevations" bson:"abbrevations"` // Abbreviations used in the chunk
 	Sentences    []string          `json:"sentences" bson:"sentences"`       // Sentences in the chunk, used for text search
+	PrevChunkID  string            `json:"prevChunkId" bson:"prevChunkId"`   // ID of the previous chunk in the sequence
+	NextChunkID  string            `json:"nextChunkId" bson:"nextChunkId"`
 }
 
 func (m ChunkModel) Id() string { return m.ChunkID }

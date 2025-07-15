@@ -3,6 +3,7 @@ import gc
 import spacy
 import tiktoken
 from workers.indexer_types import Chunk
+from collections.abc import Iterator
 
 # Set up logging
 logging.basicConfig(
@@ -22,7 +23,7 @@ class WindowChunker:
 
     def chunk_windows(
         self, section_chunk: Chunk, window_size: int = 700, stride: int = 600
-    ) -> list[Chunk]:
+    ) -> Iterator[Chunk]:
         """
         Splits a list of section chunks into smaller windows of 10 chunks each.
 
@@ -30,13 +31,12 @@ class WindowChunker:
             section_chunks (list[Chunk]): List of section chunks to be split.
 
         Returns:
-            list[Chunk]: List of windowed chunks.
+            Iterator[Chunk]: Enumerable of windowed chunks.
             • No sentence is ever split across windows.
             • `window_size` ≈ max tokens per window.
             • Windows overlap by ~`window_size - stride` tokens
             (aligned to sentence boundaries).
         """
-        result = []
 
         # Split the body into sentences
         logger.info(
@@ -73,15 +73,15 @@ class WindowChunker:
             window_sentences = sentences[start_sent:end_sent]
 
             # Create a new Chunk object for the window
-            result.append(
-                Chunk(
-                    chunkId=f"{section_chunk.chunkId}_{w_idx}",
-                    sectionPath=section_chunk.sectionPath,
-                    sectionIndex=section_chunk.sectionIndex,
-                    title=section_chunk.title,
-                    sourceUri=section_chunk.sourceUri,
-                    sentences=window_sentences,
-                )
+            yield Chunk(
+                chunkId=f"{section_chunk.chunkId}_{w_idx}",
+                sectionPath=section_chunk.sectionPath,
+                sectionIndex=section_chunk.sectionIndex,
+                title=section_chunk.title,
+                sourceUri=section_chunk.sourceUri,
+                sentences=window_sentences,
+                prevChunkId="",
+                nextChunkId="",
             )
 
             w_idx += 1
@@ -99,12 +99,8 @@ class WindowChunker:
             if start_sent == end_sent:
                 start_sent += 1
 
-        logger.info(
-            f"Created {len(result)} windowed chunks for {section_chunk.chunkId} section chunks."
-        )
 
         gc.collect()
-        return result
 
     def __count_tokens__(self, text: str) -> int:
         """

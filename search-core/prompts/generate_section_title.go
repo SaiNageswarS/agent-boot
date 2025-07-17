@@ -48,6 +48,7 @@ func GenerateSectionTitle(ctx context.Context, client *llm.OllamaLLMClient, docT
 		)
 
 		if err != nil {
+			logger.Error("Failed to generate section title", zap.Error(err))
 			return "", err
 		}
 
@@ -55,6 +56,10 @@ func GenerateSectionTitle(ctx context.Context, client *llm.OllamaLLMClient, docT
 		titleLines := extractSection(response, "TITLE:")
 		title := strings.TrimSpace(strings.Join(titleLines, " "))
 
-		return title, err
+		if len(title) == 0 || len(title) > 100 {
+			thoughts := extractSection(response, "THOUGHTS:")
+			logger.Error("Generated title is empty or too long", zap.String("title", title), zap.String("thoughts", strings.Join(thoughts, " ")))
+		}
+		return title, nil
 	})
 }

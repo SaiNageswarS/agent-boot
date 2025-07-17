@@ -19,74 +19,107 @@ import (
 	"go.uber.org/zap"
 )
 
-const minSectionBytes = 4000 // Minimum bytes for a section to be considered valid
+const minSectionBytes = 4000    // Minimum bytes for a section to be considered valid
+const maxTitleInputBytes = 2500 // Maximum bytes for title generation input
 
 // ChunkMarkdown processes a markdown file, chunks it into sections, and uploads the chunks to Azure Blob Storage.
 // It returns the paths to the uploaded chunks JSON file. Each chunk is uploaded as a separate file in the specified {tenant}/{markdownFile} directory.
 func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markdownFile, sectionsOutputPath string) ([]string, error) {
+	// download markdown bytes
 	markDownBytes, err := getBytes(s.az.DownloadFile(ctx, tenant, markdownFile))
 	if err != nil {
-		return []string{}, errors.New("failed to download PDF file: " + err.Error())
+		return nil, errors.New("failed to download markdown file: " + err.Error())
 	}
 
-	// Chunk the Markdown file
-	chunks, err := chunkMarkdownSections(ctx, s.ollama, sourceUri, s.ccfg.TitleGenModel, markDownBytes)
-	if err != nil {
-		return []string{}, errors.New("failed to chunk PDF file: " + err.Error())
-	}
+	// start the chunk generator
+	chunksCh, errCh := chunkMarkdownSections(ctx, s.ollama, sourceUri, s.ccfg.TitleGenModel, markDownBytes)
 
-	// write combined sections to a single file for debugging purposes
-	combinedSectionsFile := fmt.Sprintf("%s/combined_sections.json", sectionsOutputPath)
-	writeToStorage(ctx, s.az, tenant, combinedSectionsFile, chunks)
+	// for debugging: collect all chunks into one big slice and write combined
+	var allChunks []db.ChunkModel
 
+	// stream out each chunk as soon as it's ready
 	var sectionChunkPaths []string
-	for _, chunk := range chunks {
+	for chunk := range chunksCh {
+		allChunks = append(allChunks, chunk)
+
+		// write each chunk out immediately
 		chunkPath := fmt.Sprintf("%s/%s.chunk.json", sectionsOutputPath, chunk.ChunkID)
 		writeToStorage(ctx, s.az, tenant, chunkPath, chunk)
 		sectionChunkPaths = append(sectionChunkPaths, chunkPath)
 	}
 
+	// check for any generation error
+	if genErr := <-errCh; genErr != nil {
+		return nil, fmt.Errorf("failed to chunk markdown sections: %w", genErr)
+	}
+
+	// write combined sections for debugging
+	combinedSectionsFile := fmt.Sprintf("%s/combined_sections.json", sectionsOutputPath)
+	writeToStorage(ctx, s.az, tenant, combinedSectionsFile, allChunks)
+
 	return sectionChunkPaths, nil
 }
 
-func chunkMarkdownSections(ctx context.Context, ollama *llm.OllamaLLMClient, sourceUri, titleGenModel string, markdown []byte) ([]db.ChunkModel, error) {
-	sections, err := parseMarkdownSections(markdown, minSectionBytes)
-	if err != nil {
-		logger.Error("Failed to parse markdown sections", zap.Error(err))
-		return nil, err
-	}
+func chunkMarkdownSections(
+	ctx context.Context,
+	ollama *llm.OllamaLLMClient,
+	sourceUri, titleGenModel string,
+	markdown []byte,
+) (<-chan db.ChunkModel, <-chan error) {
+	chunksCh := make(chan db.ChunkModel)
+	errCh := make(chan error, 1)
 
-	var out []db.ChunkModel
-	for idx, sec := range sections {
-		secHash, _ := odm.HashedKey(sec.body)
+	go func() {
+		defer close(chunksCh)
+		defer close(errCh)
 
-		// Generate a concise title for the section using LLM
-		title, err := async.Await(prompts.GenerateSectionTitle(ctx, ollama, sourceUri, sec.path[len(sec.path)-1], sec.body, titleGenModel))
-		if err != nil || len(title) > 100 {
-			logger.Error("Failed to generate section title", zap.Error(err))
-			title = sec.path[len(sec.path)-1] // fallback to last path segment
+		sections, err := parseMarkdownSections(markdown, minSectionBytes)
+		if err != nil {
+			logger.Error("Failed to parse markdown sections", zap.Error(err))
+			errCh <- err
+			return
 		}
 
-		secChunk := db.ChunkModel{
-			ChunkID:      secHash,
-			SectionPath:  strings.Join(sec.path, " | "),
-			SectionIndex: idx + 1, // 1-based index
-			Title:        title,
-			SourceURI:    sourceUri,
-			Sentences:    []string{sec.body},
+		for idx, sec := range sections {
+			select {
+			case <-ctx.Done():
+				errCh <- ctx.Err()
+				return
+			default:
+			}
+
+			secHash, _ := odm.HashedKey(sec.body)
+
+			// Generate a concise title
+			titleBodyInputLen := min(len(sec.body), maxTitleInputBytes)
+			title, titleErr := async.Await(prompts.GenerateSectionTitle(
+				ctx, ollama, sourceUri,
+				sec.path[len(sec.path)-1], sec.body[0:titleBodyInputLen], titleGenModel,
+			))
+			if titleErr != nil || len(title) == 0 || len(title) > 100 {
+				logger.Error("Failed to generate section title", zap.Error(titleErr))
+				title = sec.path[len(sec.path)-1]
+			}
+
+			chunk := db.ChunkModel{
+				ChunkID:      secHash,
+				SectionPath:  strings.Join(sec.path, " | "),
+				SectionIndex: idx + 1,
+				Title:        title,
+				SourceURI:    sourceUri,
+				Sentences:    []string{sec.body},
+				PrevChunkID:  "", // Populated later in window activity
+				NextChunkID:  "", // Populated later in window activity
+			}
+
+			chunksCh <- chunk
+			logger.Info("Extracted section chunk", zap.String("chunkID", chunk.ChunkID), zap.String("title", chunk.Title))
 		}
 
-		if idx > 0 {
-			// Set the previous chunk ID for all but the first section
-			secChunk.PrevChunkID = out[idx-1].ChunkID
-			out[idx-1].NextChunkID = secChunk.ChunkID // link previous chunk to current
-		}
+		errCh <- nil
+	}()
 
-		out = append(out, secChunk)
-	}
-
-	logger.Info("Markdown sections chunked", zap.Int("sectionCount", len(out)), zap.String("fileName", sourceUri))
-	return out, nil
+	return chunksCh, errCh
 }
 
 func parseMarkdownSections(md []byte, minBytes int) ([]markdownSection, error) {

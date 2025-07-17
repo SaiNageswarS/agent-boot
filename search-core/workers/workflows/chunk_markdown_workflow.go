@@ -17,7 +17,7 @@ func ChunkMarkdownWorkflow(ctx workflow.Context, input ChunkMarkdownWorkflowInpu
 	pyCtx := workflow.WithActivityOptions(ctx, pyActivityOpts)
 
 	activityOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: time.Minute * 10,
+		StartToCloseTimeout: time.Minute * 30,
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 

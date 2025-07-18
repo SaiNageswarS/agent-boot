@@ -105,6 +105,8 @@ func chunkMarkdownSections(
 				ChunkID:      secHash,
 				SectionPath:  strings.Join(sec.path, " | "),
 				SectionIndex: idx + 1,
+				SectionID:    secHash,
+				WindowIndex:  0, // Populated later in window activity
 				Title:        title,
 				SourceURI:    sourceUri,
 				Sentences:    []string{sec.body},

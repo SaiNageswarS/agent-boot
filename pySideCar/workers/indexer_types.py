@@ -9,11 +9,13 @@ class Chunk:
     chunkId: str
     title: str
     sectionPath: str
-    sectionIndex: int  # Index of the section in the path
-    sourceUri: str  # e.g., "file://path/to/file.pdf"
+    sectionIndex: int     # Index of the section in the path
+    sourceUri: str      
     sentences: List[str]  # The actual content of the chunk
     prevChunkId: str 
     nextChunkId: str
+    sectionId: str      # Stable hash for the section
+    windowIndex: int    # 0-based window order within section
     tags: Optional[List[str]] = None  # Optional tags for the chunk
     abbrevations: Optional[Dict[str, str]] = None  # Optional abbreviations mapping
 

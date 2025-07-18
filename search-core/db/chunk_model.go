@@ -19,6 +19,8 @@ type ChunkModel struct {
 	Sentences    []string          `json:"sentences" bson:"sentences"`       // Sentences in the chunk, used for text search
 	PrevChunkID  string            `json:"prevChunkId" bson:"prevChunkId"`   // ID of the previous chunk in the sequence
 	NextChunkID  string            `json:"nextChunkId" bson:"nextChunkId"`
+	SectionID    string            `bson:"sectionId" json:"sectionId"`     // stable hash for the *section* (same for all windows of that section)
+	WindowIndex  int               `bson:"windowIndex" json:"windowIndex"` // 0-based window order *within* section
 }
 
 func (m ChunkModel) Id() string { return m.ChunkID }

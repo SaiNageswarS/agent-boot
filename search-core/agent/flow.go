@@ -119,12 +119,12 @@ func (af *AgentFlow) SummarizeContext(ctx context.Context, model, userInput stri
 
 	for i := 0; i < len(af.SearchResults); {
 		head := af.SearchResults[i]
-		section, _ := getSectionAndIndex(head)
+		section := head.SectionID
 
 		buf := append([]string(nil), head.Sentences...)
 		j := i + 1
 		for j < len(af.SearchResults) {
-			if s, _ := getSectionAndIndex(af.SearchResults[j]); s != section {
+			if af.SearchResults[j].SectionID != section {
 				break
 			}
 			buf = append(buf, af.SearchResults[j].Sentences...)

@@ -81,6 +81,8 @@ class WindowChunker:
                 title=section_chunk.title,
                 sourceUri=section_chunk.sourceUri,
                 sentences=window_sentences,
+                sectionId=section_chunk.sectionId,
+                windowIndex=w_idx,
                 prevChunkId="",
                 nextChunkId="",
             )

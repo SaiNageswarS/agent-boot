@@ -4,8 +4,6 @@ import (
 	"context"
 	"slices"
 	"sort"
-	"strconv"
-	"strings"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/go-api-boot/llm"
@@ -290,83 +288,75 @@ func (s *SearchStep) addNeighborsAndReorder(ctx context.Context, rankedChunks []
 		return rankedChunks
 	}
 
-	// 1. Collect all neighbor IDs we need to fetch
-	neighborIds := ds.NewSet[string]()
-	for _, chunk := range rankedChunks {
-		sectionId, index := getSectionAndIndex(chunk)
-		if sectionId != "" && index >= 0 {
-			// Add previous neighbor
-			if index > 0 {
-				prevId := sectionId + "_" + strconv.Itoa(index-1)
-				neighborIds.Add(prevId)
-			}
-			// Add next neighbor
-			nextId := sectionId + "_" + strconv.Itoa(index+1)
-			neighborIds.Add(nextId)
+	// 1. Order chunks by WindowIndex in a Section preserving the RRF order.
+	sectionRank := make(map[string]int, len(rankedChunks))
+	for idx, ch := range rankedChunks {
+		if _, ok := sectionRank[ch.SectionID]; !ok {
+			sectionRank[ch.SectionID] = idx
 		}
 	}
 
-	// Remove IDs that we already have
-	for _, chunk := range rankedChunks {
-		neighborIds.Remove(chunk.ChunkID)
+	sort.SliceStable(rankedChunks, func(i, j int) bool {
+		si, sj := rankedChunks[i], rankedChunks[j]
+
+		if si.SectionID != sj.SectionID {
+			return sectionRank[si.SectionID] < sectionRank[sj.SectionID]
+		}
+		return si.WindowIndex < sj.WindowIndex
+	})
+
+	// 2. Populate PrevChunkID and NextChunkID for each chunk.
+	seenIds := ds.NewSet[string]()
+	for _, c := range rankedChunks {
+		seenIds.Add(c.ChunkID)
 	}
 
-	// 2. Fetch all neighbors in one DB call
-	var allChunks []*db.ChunkModel
-	allChunks = append(allChunks, rankedChunks...)
+	needIds := ds.NewSet[string]()
+	for _, c := range rankedChunks {
+		if len(c.PrevChunkID) > 0 && !seenIds.Contains(c.PrevChunkID) && !needIds.Contains(c.PrevChunkID) {
+			needIds.Add(c.PrevChunkID)
+		}
 
-	if neighborIds.Len() > 0 {
-		neighbors, err := async.Await(
-			s.chunkRepository.Find(ctx, bson.M{"_id": bson.M{"$in": neighborIds.ToSlice()}}, nil, 0, 0),
+		if len(c.NextChunkID) > 0 && !seenIds.Contains(c.NextChunkID) && !needIds.Contains(c.NextChunkID) {
+			needIds.Add(c.NextChunkID)
+		}
+	}
+
+	var neighbors []db.ChunkModel
+	var err error
+	if needIds.Len() > 0 {
+		neighbors, err = async.Await(
+			s.chunkRepository.Find(ctx, bson.M{"_id": bson.M{"$in": needIds.ToSlice()}}, nil, 0, 0),
 		)
 
 		if err != nil {
-			logger.Error("Failed to fetch neighbor chunks", zap.Error(err))
-		} else {
-			allChunks = append(allChunks, linq.Map(neighbors, func(ch db.ChunkModel) *db.ChunkModel { return &ch })...)
+			logger.Error("Failed to fetch neighbors from database", zap.Error(err))
+			return rankedChunks // return what we have so far
 		}
 	}
 
-	// 3. Group by section
-	sectionGroups := make(map[string][]*db.ChunkModel)
-	for _, chunk := range allChunks {
-		sectionId, _ := getSectionAndIndex(chunk)
-		if sectionId != "" {
-			sectionGroups[sectionId] = append(sectionGroups[sectionId], chunk)
+	// 3. Build a map for quick neighbor lookup.
+	neighborsById := make(map[string]*db.ChunkModel, len(neighbors))
+	for i := range neighbors {
+		n := neighbors[i]
+		neighborsById[n.ChunkID] = &n
+	}
+
+	// 4. Update PrevChunkID and NextChunkID for each chunk.
+	out := make([]*db.ChunkModel, 0, len(rankedChunks)*3)
+	for _, c := range rankedChunks {
+		if prevChunk, ok := neighborsById[c.PrevChunkID]; ok {
+			out = append(out, prevChunk)
+			delete(neighborsById, c.PrevChunkID) // avoid duplicates
+		}
+
+		out = append(out, c)
+
+		if nextChunk, ok := neighborsById[c.NextChunkID]; ok {
+			out = append(out, nextChunk)
+			delete(neighborsById, c.NextChunkID) // avoid duplicates
 		}
 	}
 
-	// 4. Sort each section by index
-	for sectionId := range sectionGroups {
-		sort.Slice(sectionGroups[sectionId], func(i, j int) bool {
-			_, indexI := getSectionAndIndex(sectionGroups[sectionId][i])
-			_, indexJ := getSectionAndIndex(sectionGroups[sectionId][j])
-			return indexI < indexJ
-		})
-	}
-
-	// 5. Flatten back to a single list by section Rank.
-	var result []*db.ChunkModel
-	for _, rankedChunk := range rankedChunks {
-		sectionId, _ := getSectionAndIndex(rankedChunk)
-		sectionChunks, exists := sectionGroups[sectionId]
-		if exists {
-			result = append(result, sectionChunks...)
-			// Remove the section from the map to avoid duplicates
-			delete(sectionGroups, sectionId)
-		}
-	}
-
-	return result
-}
-
-func getSectionAndIndex(c *db.ChunkModel) (string, int) {
-	// ChunkId is in the format "sectionId_index"
-	parts := strings.Split(c.ChunkID, "_")
-	if len(parts) < 2 {
-		return "", -1
-	}
-
-	idx, _ := strconv.Atoi(parts[1])
-	return parts[0], idx
+	return out
 }

@@ -59,12 +59,12 @@ func ExtractSearchQueries(ctx context.Context, client llm.LLMClient, modelVersio
 
 		logger.Info("ExtractAgentInput response", zap.String("response", response))
 
-		out := parseResponse(response)
+		out := parseResponse(ctx, response)
 		return out, nil
 	})
 }
 
-func parseResponse(responseText string) *ExtractSearchQueriesResponse {
+func parseResponse(ctx context.Context, responseText string) *ExtractSearchQueriesResponse {
 	lines := strings.Split(strings.TrimSpace(responseText), "\n")
 	out := &ExtractSearchQueriesResponse{}
 
@@ -76,15 +76,27 @@ func parseResponse(responseText string) *ExtractSearchQueriesResponse {
 			queryStr := strings.TrimSpace(after1)
 
 			if queryStr != "" {
-				out.SearchQueries = strings.Split(queryStr, "|")
-				out.SearchQueries = linq.From(out.SearchQueries).
-					Select(func(q string) string {
+				searchQueries := strings.Split(queryStr, "|")
+				searchQueries, err := linq.Pipe3(
+					linq.FromSlice(ctx, searchQueries),
+
+					linq.Select(func(q string) string {
 						return strings.TrimSpace(q)
-					}).
-					Where(func(q string) bool {
+					}),
+
+					linq.Where(func(q string) bool {
 						return q != ""
-					}).
-					ToSlice()
+					}),
+
+					linq.ToSlice[string](),
+				)
+
+				if err != nil {
+					logger.Error("Failed to parse search queries", zap.Error(err))
+					out.SearchQueries = []string{queryStr}
+				} else {
+					out.SearchQueries = searchQueries
+				}
 			}
 		}
 	}

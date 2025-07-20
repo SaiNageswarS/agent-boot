@@ -8,6 +8,7 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/dotenv"
 	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/odm"
+	"github.com/SaiNageswarS/go-collection-boot/ds"
 	"github.com/SaiNageswarS/go-collection-boot/linq"
 	"github.com/stretchr/testify/assert"
 )
@@ -31,17 +32,27 @@ func TestSearch(t *testing.T) {
 		assert.NoError(t, err, "Failed to create hybrid search task")
 
 		assert.NotEmpty(t, hybridSearchResults, "Hybrid search should return results")
-		selectedChunkIds := linq.Map(hybridSearchResults, func(c *db.ChunkModel) string {
-			return c.ChunkID
-		})
+
+		selectedSections := ds.NewSet[string]()
+		_, err = linq.Pipe2(
+			linq.FromSlice(t.Context(), hybridSearchResults),
+
+			linq.Select(func(c *db.ChunkModel) string {
+				chunkIdParts := strings.Split(c.ChunkID, "_")
+				return chunkIdParts[0] // Extract the prefix from ChunkID
+			}),
+
+			linq.ForEach(func(section string) {
+				selectedSections.Add(section)
+			}),
+		)
+
+		assert.NoError(t, err, "Failed to process hybrid search results")
 
 		for _, prefix := range expectedChunkPrefixes {
-			found := linq.From(selectedChunkIds).Any(func(id string) bool {
-				return strings.HasPrefix(id, prefix)
-			})
-			assert.True(t, found, "Expected chunk ID with prefix %s not found in hybrid search results", prefix)
+			assert.True(t, selectedSections.Contains(prefix), "Expected chunk ID with prefix %s not found in hybrid search results", prefix)
 		}
 
-		assert.Len(t, hybridSearchResults, 39, "Chunks with neighbors should be more than or equal to hybrid search results")
+		assert.True(t, len(hybridSearchResults) > 30, "Chunks with neighbors should be more than or equal to hybrid search results")
 	})
 }

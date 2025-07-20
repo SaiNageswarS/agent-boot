@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"slices"
 	"sort"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
@@ -64,10 +63,19 @@ func (s *SearchStep) Run(ctx context.Context, queries []string) ([]*db.ChunkMode
 	}
 
 	// 3. Flatten and deduplicate results
-	rankedChunks := linq.Flatten(hybridSearchResults)
-	rankedChunks = linq.Distinct(rankedChunks, func(c *db.ChunkModel) string {
-		return c.ChunkID
-	})
+	rankedChunks, err := linq.Pipe3(
+		linq.FromSlice(ctx, hybridSearchResults),
+		linq.Flatten[*db.ChunkModel](),
+		linq.Distinct(func(c *db.ChunkModel) string {
+			return c.ChunkID
+		}),
+		linq.ToSlice[*db.ChunkModel](),
+	)
+
+	if err != nil {
+		logger.Error("Failed to flatten and deduplicate search results", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "flatten and deduplicate: %v", err)
+	}
 
 	// 4. Add neighbors and reorder chunks
 	rankedChunks = s.addNeighborsAndReorder(ctx, rankedChunks)
@@ -184,8 +192,16 @@ func (s *SearchStep) hybridSearch(ctx context.Context, query string) <-chan asyn
 			}
 		}
 
-		ids := linq.Map(h.ToSortedSlice(), func(p pair) string { return p.id })
-		slices.Reverse(ids) // highest score first
+		ids, err := linq.Pipe2(
+			linq.FromSlice(ctx, h.ToSortedSlice()),
+			linq.Select(func(p pair) string { return p.id }),
+			linq.Reverse[string](), // highest score first
+		)
+
+		if err != nil {
+			logger.Error("Failed to collect top-N chunk IDs", zap.Error(err))
+			return nil, status.Errorf(codes.Internal, "collect top-N: %v", err)
+		}
 
 		//----------------------------------------------------------------------
 		// 5. Materialise the chunks
@@ -291,6 +307,8 @@ func (s *SearchStep) addNeighborsAndReorder(ctx context.Context, rankedChunks []
 	// 1. Order chunks by WindowIndex in a Section preserving the RRF order.
 	sectionRank := make(map[string]int, len(rankedChunks))
 	for idx, ch := range rankedChunks {
+		ch.IsAnchor = true // mark as anchor for later processing
+
 		if _, ok := sectionRank[ch.SectionID]; !ok {
 			sectionRank[ch.SectionID] = idx
 		}
@@ -330,8 +348,7 @@ func (s *SearchStep) addNeighborsAndReorder(ctx context.Context, rankedChunks []
 		)
 
 		if err != nil {
-			logger.Error("Failed to fetch neighbors from database", zap.Error(err))
-			return rankedChunks // return what we have so far
+			logger.Error("Failed to fetch neighbors from database", zap.Error(err)) // continue with what we have
 		}
 	}
 
@@ -342,21 +359,30 @@ func (s *SearchStep) addNeighborsAndReorder(ctx context.Context, rankedChunks []
 		neighborsById[n.ChunkID] = &n
 	}
 
-	// 4. Update PrevChunkID and NextChunkID for each chunk.
-	out := make([]*db.ChunkModel, 0, len(rankedChunks)*3)
+	// 4. Append PrevChunkId and NextChunkId sentences into anchor chunks.
 	for _, c := range rankedChunks {
+		var prev, next []string
 		if prevChunk, ok := neighborsById[c.PrevChunkID]; ok {
-			out = append(out, prevChunk)
+			prev = prevChunk.Sentences
 			delete(neighborsById, c.PrevChunkID) // avoid duplicates
 		}
 
-		out = append(out, c)
-
 		if nextChunk, ok := neighborsById[c.NextChunkID]; ok {
-			out = append(out, nextChunk)
+			next = nextChunk.Sentences
 			delete(neighborsById, c.NextChunkID) // avoid duplicates
 		}
+
+		updatedSentences := make([]string, 0, len(prev)+len(c.Sentences)+len(next))
+		if len(prev) > 0 {
+			updatedSentences = append(updatedSentences, prev...) // copy, no alias
+		}
+		updatedSentences = append(updatedSentences, c.Sentences...)
+		if len(next) > 0 {
+			updatedSentences = append(updatedSentences, next...)
+		}
+
+		c.Sentences = updatedSentences
 	}
 
-	return out
+	return rankedChunks
 }

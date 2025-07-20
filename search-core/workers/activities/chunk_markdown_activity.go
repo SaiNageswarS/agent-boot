@@ -8,7 +8,6 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
 	"github.com/SaiNageswarS/agent-boot/search-core/prompts"
-	"github.com/SaiNageswarS/go-api-boot/llm"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
@@ -26,105 +25,68 @@ const maxTitleInputBytes = 2500 // Maximum bytes for title generation input
 // It returns the paths to the uploaded chunks JSON file. Each chunk is uploaded as a separate file in the specified {tenant}/{markdownFile} directory.
 func (s *Activities) ChunkMarkdown(ctx context.Context, tenant, sourceUri, markdownFile, sectionsOutputPath string) ([]string, error) {
 	// download markdown bytes
-	markDownBytes, err := getBytes(s.az.DownloadFile(ctx, tenant, markdownFile))
+	md, err := getBytes(s.az.DownloadFile(ctx, tenant, markdownFile))
 	if err != nil {
 		return nil, errors.New("failed to download markdown file: " + err.Error())
 	}
 
-	// start the chunk generator
-	chunksCh, errCh := chunkMarkdownSections(ctx, s.ollama, sourceUri, s.ccfg.TitleGenModel, markDownBytes)
-
-	// for debugging: collect all chunks into one big slice and write combined
-	var allChunks []db.ChunkModel
-
-	// stream out each chunk as soon as it's ready
-	var sectionChunkPaths []string
-	for chunk := range chunksCh {
-		allChunks = append(allChunks, chunk)
-
-		// write each chunk out immediately
-		chunkPath := fmt.Sprintf("%s/%s.chunk.json", sectionsOutputPath, chunk.ChunkID)
-		writeToStorage(ctx, s.az, tenant, chunkPath, chunk)
-		sectionChunkPaths = append(sectionChunkPaths, chunkPath)
+	// parse sections in markdown
+	sections, err := parseMarkdownSections(ctx, md, minSectionBytes)
+	if err != nil {
+		return nil, err
 	}
 
-	// check for any generation error
-	if genErr := <-errCh; genErr != nil {
-		return nil, fmt.Errorf("failed to chunk markdown sections: %w", genErr)
-	}
+	var (
+		allChunks         []db.ChunkModel // for debugging
+		sectionChunkPaths []string
+	)
 
-	// write combined sections for debugging
-	combinedSectionsFile := fmt.Sprintf("%s/combined_sections.json", sectionsOutputPath)
-	writeToStorage(ctx, s.az, tenant, combinedSectionsFile, allChunks)
+	linq.Pipe2(
+		linq.FromSlice(ctx, sections),
+
+		// TRANSFORM each markdownSection → db.ChunkModel (with LLM call)
+		linq.Select(func(sec markdownSection) db.ChunkModel {
+			secHash, _ := odm.HashedKey(sec.body)
+
+			// generate a concise title – any error handled below
+			titleBodyInputLen := min(len(sec.body), maxTitleInputBytes)
+			title, _ := async.Await(prompts.GenerateSectionTitle(
+				ctx, s.ollama, sourceUri,
+				sec.path[len(sec.path)-1], sec.body[:titleBodyInputLen], s.ccfg.TitleGenModel,
+			))
+			if title == "" || len(title) > 100 {
+				title = sec.path[len(sec.path)-1]
+			}
+
+			return db.ChunkModel{
+				ChunkID:      secHash,
+				SectionPath:  strings.Join(sec.path, " | "),
+				SectionIndex: len(allChunks) + 1, // running index
+				SectionID:    secHash,
+				Title:        title,
+				SourceURI:    sourceUri,
+				Sentences:    []string{sec.body},
+			}
+		}),
+
+		// SINK: perform side-effects as soon as each chunk arrives
+		linq.ForEach(func(chunk db.ChunkModel) {
+			allChunks = append(allChunks, chunk)
+
+			chunkPath := fmt.Sprintf("%s/%s.chunk.json", sectionsOutputPath, chunk.ChunkID)
+			writeToStorage(ctx, s.az, tenant, chunkPath, chunk) // persist immediately
+			sectionChunkPaths = append(sectionChunkPaths, chunkPath)
+
+			logger.Info("Extracted section chunk",
+				zap.String("chunkID", chunk.ChunkID),
+				zap.String("title", chunk.Title))
+		}),
+	)
 
 	return sectionChunkPaths, nil
 }
 
-func chunkMarkdownSections(
-	ctx context.Context,
-	ollama *llm.OllamaLLMClient,
-	sourceUri, titleGenModel string,
-	markdown []byte,
-) (<-chan db.ChunkModel, <-chan error) {
-	chunksCh := make(chan db.ChunkModel)
-	errCh := make(chan error, 1)
-
-	go func() {
-		defer close(chunksCh)
-		defer close(errCh)
-
-		sections, err := parseMarkdownSections(markdown, minSectionBytes)
-		if err != nil {
-			logger.Error("Failed to parse markdown sections", zap.Error(err))
-			errCh <- err
-			return
-		}
-
-		for idx, sec := range sections {
-			select {
-			case <-ctx.Done():
-				errCh <- ctx.Err()
-				return
-			default:
-			}
-
-			secHash, _ := odm.HashedKey(sec.body)
-
-			// Generate a concise title
-			titleBodyInputLen := min(len(sec.body), maxTitleInputBytes)
-			title, titleErr := async.Await(prompts.GenerateSectionTitle(
-				ctx, ollama, sourceUri,
-				sec.path[len(sec.path)-1], sec.body[0:titleBodyInputLen], titleGenModel,
-			))
-			if titleErr != nil || len(title) == 0 || len(title) > 100 {
-				logger.Error("Failed to generate section title", zap.Error(titleErr))
-				title = sec.path[len(sec.path)-1]
-			}
-
-			chunk := db.ChunkModel{
-				ChunkID:      secHash,
-				SectionPath:  strings.Join(sec.path, " | "),
-				SectionIndex: idx + 1,
-				SectionID:    secHash,
-				WindowIndex:  0, // Populated later in window activity
-				Title:        title,
-				SourceURI:    sourceUri,
-				Sentences:    []string{sec.body},
-				PrevChunkID:  "", // Populated later in window activity
-				NextChunkID:  "", // Populated later in window activity
-			}
-
-			chunksCh <- chunk
-			logger.Info("Extracted section chunk", zap.String("chunkID", chunk.ChunkID), zap.String("title", chunk.Title))
-		}
-
-		errCh <- nil
-	}()
-
-	return chunksCh, errCh
-}
-
-func parseMarkdownSections(md []byte, minBytes int) ([]markdownSection, error) {
+func parseMarkdownSections(ctx context.Context, md []byte, minBytes int) ([]markdownSection, error) {
 	reader := text.NewReader(md)
 	root := goldmark.DefaultParser().Parse(reader)
 
@@ -195,7 +157,17 @@ func parseMarkdownSections(md []byte, minBytes int) ([]markdownSection, error) {
 			prev.body += "\n\n" + s.body
 			// Append the current section's path to the previous section's path
 			prev.path = append(prev.path, s.path...)
-			prev.path = linq.Distinct(prev.path, func(a string) string { return a }) // Ensure unique paths
+			combinedPath, err := linq.Pipe2(
+				linq.FromSlice(ctx, prev.path),
+				linq.Distinct(func(a string) string { return a }), // Ensure unique paths
+				linq.ToSlice[string](),
+			)
+
+			if err != nil {
+				logger.Error("Failed to combine section paths", zap.Error(err))
+			} else {
+				prev.path = combinedPath
+			}
 		} else {
 			merged = append(merged, s)
 		}

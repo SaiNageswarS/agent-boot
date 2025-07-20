@@ -34,9 +34,10 @@ func (s *Activities) GetChunksWithMissingEmbeddings(ctx context.Context, tenant,
 		return nil, nil // nothing to do
 	}
 
-	chunkIds := linq.Map(chunkModels, func(chunk db.ChunkModel) string {
-		return chunk.ChunkID
-	})
+	chunkIds := make([]string, len(chunkModels))
+	for i, chunk := range chunkModels {
+		chunkIds[i] = chunk.ChunkID
+	}
 
 	logger.Info("Chunks found", zap.String("sourceUri", sourceUri), zap.Int("count", len(chunkIds)))
 
@@ -54,12 +55,20 @@ func (s *Activities) GetChunksWithMissingEmbeddings(ctx context.Context, tenant,
 		chunkAnnIdsPresent[annModel.ChunkID] = true
 	}
 
-	chunkIds = linq.From(chunkIds).
-		Where(func(chunkId string) bool {
+	chunkIds, err = linq.Pipe2(
+		linq.FromSlice(ctx, chunkIds),
+
+		linq.Where(func(chunkId string) bool {
 			// Check if the chunk ID is not present in the annotations
 			return !chunkAnnIdsPresent[chunkId]
-		}).
-		ToSlice()
+		}),
+
+		linq.ToSlice[string](),
+	)
+
+	if err != nil {
+		return nil, errors.New("failed to filter chunkIds with missing embeddings: " + err.Error())
+	}
 
 	if len(chunkIds) == 0 {
 		logger.Info("No chunks with missing embeddings found", zap.String("sourceUri", sourceUri))

@@ -21,6 +21,7 @@ type ChunkModel struct {
 	NextChunkID  string            `json:"nextChunkId" bson:"nextChunkId"`
 	SectionID    string            `bson:"sectionId" json:"sectionId"`     // stable hash for the *section* (same for all windows of that section)
 	WindowIndex  int               `bson:"windowIndex" json:"windowIndex"` // 0-based window order *within* section
+	IsAnchor     bool              `bson:"-" json:"-"`
 }
 
 func (m ChunkModel) Id() string { return m.ChunkID }

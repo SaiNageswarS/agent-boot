@@ -14,7 +14,6 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
-	"github.com/SaiNageswarS/go-collection-boot/linq"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -132,9 +131,11 @@ func (s *AgentService) saveSession(ctx context.Context, result *agent.AgentFlow,
 	turn := db.TurnModel{UserInput: input}
 	turn.SearchQueries = result.SearchQueries
 	turn.AgentAnswer = result.Answer
-	turn.SearchResultChunkIds = linq.Map(result.SearchResults, func(r *db.ChunkModel) string {
-		return r.ChunkID
-	})
+	turn.SearchResultChunkIds = make([]string, len(result.SearchResults))
+	for i, chunk := range result.SearchResults {
+		turn.SearchResultChunkIds[i] = chunk.ChunkID
+	}
+
 	session.Turns = append(session.Turns, turn)
 	async.Await(odm.CollectionOf[db.SessionModel](s.mongo, tenant).Save(ctx, *session))
 }

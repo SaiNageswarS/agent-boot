@@ -133,6 +133,11 @@ func (af *AgentFlow) SummarizeContext(ctx context.Context, model, userInput stri
 
 	logger.Info("[Context Summarization] Grouped sections", zap.Int("total_sections", len(sections)))
 
+	// limit number of sections
+	if len(sections) > 10 {
+		sections = sections[:10]
+	}
+
 	// ── 2. streamed summarization and reporting ─────────────────────
 	var citation int32                // 1-based, only for streamed items
 	remaining := int32(len(sections)) // decremented for every finished job
@@ -141,7 +146,7 @@ func (af *AgentFlow) SummarizeContext(ctx context.Context, model, userInput stri
 		linq.FromSlice(ctx, sections),
 
 		// Summarize
-		linq.Select(func(section *db.ChunkModel) *db.ChunkModel {
+		linq.SelectPar(func(section *db.ChunkModel) *db.ChunkModel {
 			summary, _ := async.Await(
 				prompts.SummarizeContext(ctx, af.llmClient,
 					model, userInput, section.Sentences),

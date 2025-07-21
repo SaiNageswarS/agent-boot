@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"github.com/SaiNageswarS/agent-boot/search-core/db"
@@ -14,6 +13,7 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-collection-boot/async"
+	"github.com/SaiNageswarS/go-collection-boot/linq"
 	"go.uber.org/zap"
 )
 
@@ -111,11 +111,7 @@ func (af *AgentFlow) SummarizeContext(ctx context.Context, model, userInput stri
 	af.rep.Metadata(ctx, "summarizing_context", int32(len(af.SearchResults)), 0)
 
 	// ── 1. group consecutive chunks by section ──────────────────────────────
-	type sectionJob struct {
-		head      *db.ChunkModel
-		sentences []string
-	}
-	jobs := make([]sectionJob, 0)
+	sections := make([]*db.ChunkModel, 0)
 
 	for i := 0; i < len(af.SearchResults); {
 		head := af.SearchResults[i]
@@ -130,58 +126,70 @@ func (af *AgentFlow) SummarizeContext(ctx context.Context, model, userInput stri
 			buf = append(buf, af.SearchResults[j].Sentences...)
 			j++
 		}
-		jobs = append(jobs, sectionJob{head: head, sentences: buf})
+		head.Sentences = buf
+		sections = append(sections, head)
 		i = j
 	}
 
-	logger.Info("[Context Summarization] Grouped sections", zap.Int("total_sections", len(jobs)))
+	logger.Info("[Context Summarization] Grouped sections", zap.Int("total_sections", len(sections)))
 
-	// ── 2. parallel summarisation & immediate streaming ─────────────────────
-	var wg sync.WaitGroup
-	var streamMu sync.Mutex
+	// ── 2. streamed summarization and reporting ─────────────────────
+	var citation int32                // 1-based, only for streamed items
+	remaining := int32(len(sections)) // decremented for every finished job
 
-	var citation int32            // 1-based, only for streamed items
-	remaining := int32(len(jobs)) // decremented for every finished job
+	out, err := linq.Pipe4(
+		linq.FromSlice(ctx, sections),
 
-	for _, job := range jobs {
-		wg.Add(1)
-		go func(j sectionJob) {
-			defer wg.Done()
-
-			summary, err := async.Await(
-				prompts.SummarizeContext(ctx, af.llmClient, model, userInput, j.sentences),
+		// Summarize
+		linq.Select(func(section *db.ChunkModel) *db.ChunkModel {
+			summary, _ := async.Await(
+				prompts.SummarizeContext(ctx, af.llmClient,
+					model, userInput, section.Sentences),
 			)
+			section.Sentences = summary
+			return section
+		}),
 
-			// decide whether to keep this section
-			if err != nil || len(summary) == 0 {
+		// Filter out irrelevant summaries
+		linq.Where(func(s *db.ChunkModel) bool {
+			summary := s.Sentences
+
+			if len(summary) == 0 {
 				atomic.AddInt32(&remaining, -1) // skipped
-				return                          // nothing streamed
+				return false
 			}
 
-			j.head.Sentences = summary
+			if len(summary) == 1 {
+				atomic.AddInt32(&remaining, -1) // skipped
+				logger.Info("Section found with single sentence, skipping summarization", zap.String("section", summary[0]),
+					zap.String("userInput", userInput), zap.String("model", model))
+				return false
+			}
 
-			// ── critical section: write to stream ──────────────────────────
-			streamMu.Lock()
+			return true
+		}),
+
+		// Report each section with its citation number
+		linq.Select(func(s *db.ChunkModel) *db.ChunkModel {
 			idx := atomic.AddInt32(&citation, 1) // assign citation #
 			last := atomic.AddInt32(&remaining, -1) == 0
-			af.rep.SearchResults(ctx, j.head, int(idx), len(af.SearchResults), last)
-			streamMu.Unlock()
-		}(job)
-	}
 
-	wg.Wait()
+			af.rep.SearchResults(ctx, s, int(idx), len(af.SearchResults), last)
+			return s
+		}),
 
-	// collect only the sections that were summarised & streamed
-	out := make([]*db.ChunkModel, 0, citation)
-	for _, j := range jobs {
-		if len(j.head.Sentences) > 0 && j.head != nil {
-			out = append(out, j.head)
-		}
+		linq.ToSlice[*db.ChunkModel](),
+	)
+
+	if err != nil {
+		af.Err = fmt.Errorf("context summarization failed: %w", err)
+		af.rep.Error(ctx, "CONTEXT_SUMMARIZATION_FAILED", err.Error())
+		return af
 	}
 
 	logger.Info("Context summarization completed",
 		zap.Int("total_sections_kept", len(out)),
-		zap.Int("total_sections_skipped", len(jobs)-len(out)))
+		zap.Int("total_sections_skipped", len(sections)-len(out)))
 
 	af.SearchResults = out
 	return af

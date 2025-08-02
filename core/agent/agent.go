@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -320,19 +319,8 @@ func (a *Agent) GetAvailablePrompts() map[string]PromptTemplate {
 }
 
 // Helper methods
-
-func (a *Agent) parseToolSelections(response string) ([]ToolSelection, error) {
-	// First try to parse structured text format
-	if selections, err := a.parseStructuredTextSelections(response); err == nil && len(selections) > 0 {
-		return selections, nil
-	}
-
-	// Fall back to JSON parsing for backward compatibility
-	return a.parseJSONSelections(response)
-}
-
 // parseStructuredTextSelections parses the new TOOL_SELECTION_START/END format
-func (a *Agent) parseStructuredTextSelections(response string) ([]ToolSelection, error) {
+func (a *Agent) parseToolSelections(response string) ([]ToolSelection, error) {
 	// Look for TOOL_SELECTION_START and TOOL_SELECTION_END markers
 	startMarker := "TOOL_SELECTION_START"
 	endMarker := "TOOL_SELECTION_END"
@@ -448,69 +436,6 @@ func (a *Agent) parseToolBlock(block string) (ToolSelection, error) {
 		Confidence: confidence,
 		Reasoning:  reasoning,
 	}, nil
-}
-
-// parseJSONSelections parses the legacy JSON format for backward compatibility
-func (a *Agent) parseJSONSelections(response string) ([]ToolSelection, error) {
-	// Try to extract JSON from the response
-	start := strings.Index(response, "[")
-	end := strings.LastIndex(response, "]")
-
-	if start == -1 || end == -1 || start >= end {
-		return nil, fmt.Errorf("no valid JSON array found in response")
-	}
-
-	jsonStr := response[start : end+1]
-
-	var rawSelections []map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &rawSelections); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	selections := make([]ToolSelection, 0, len(rawSelections))
-	for _, raw := range rawSelections {
-		toolName, ok := raw["tool_name"].(string)
-		if !ok {
-			continue
-		}
-
-		// Find the tool by name
-		var foundTool *MCPTool
-		for _, tool := range a.config.Tools {
-			if tool.Name == toolName {
-				foundTool = &tool
-				break
-			}
-		}
-
-		if foundTool == nil {
-			continue
-		}
-
-		confidence, _ := raw["confidence"].(float64)
-		if confidence == 0 {
-			confidence = 0.5 // Default confidence
-		}
-
-		reasoning, _ := raw["reasoning"].(string)
-		if reasoning == "" {
-			reasoning = "Selected by AI"
-		}
-
-		parameters, _ := raw["parameters"].(map[string]interface{})
-		if parameters == nil {
-			parameters = make(map[string]interface{})
-		}
-
-		selections = append(selections, ToolSelection{
-			Tool:       *foundTool,
-			Parameters: parameters,
-			Confidence: confidence,
-			Reasoning:  reasoning,
-		})
-	}
-
-	return selections, nil
 }
 
 func (a *Agent) executeTool(ctx context.Context, selection ToolSelection) ([]*ToolResult, error) {

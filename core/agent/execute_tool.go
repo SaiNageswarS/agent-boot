@@ -2,15 +2,36 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"maps"
 	"strings"
+	"time"
 
 	"github.com/SaiNageswarS/agent-boot/core/llm"
 	"github.com/SaiNageswarS/agent-boot/core/prompts"
+	"github.com/SaiNageswarS/go-collection-boot/linq"
 )
 
 func (a *Agent) ExecuteTool(ctx context.Context, selection ToolSelection) ([]*ToolResultChunk, error) {
+	a.reportProgress(NewToolExecutionEvent(
+		"execution_starting",
+		fmt.Sprintf("Starting execution of tool: %s", selection.Tool.Name),
+		&ToolExecutionProgress{
+			ToolName:   selection.Tool.Name,
+			Parameters: selection.Parameters,
+			Status:     "starting",
+		},
+	))
+
+	toolStartTime := time.Now()
 	results, err := selection.Tool.Handler(ctx, selection.Parameters)
 	if err != nil {
+		a.reportProgress(NewErrorEvent(
+			"tool_execution",
+			fmt.Sprintf("Tool %s execution failed", selection.Tool.Name),
+			err.Error(),
+		))
+
 		return nil, err
 	}
 
@@ -30,6 +51,31 @@ func (a *Agent) ExecuteTool(ctx context.Context, selection ToolSelection) ([]*To
 		return summarizedResults, nil
 	}
 
+	toolDuration := time.Since(toolStartTime)
+
+	// Report tool execution completed with results
+	a.reportProgress(NewToolExecutionEvent(
+		"execution_completed",
+		fmt.Sprintf("Tool execution completed: %s", selection.Tool.Name),
+		&ToolExecutionProgress{
+			ToolName:   selection.Tool.Name,
+			Parameters: selection.Parameters,
+			Status:     "completed",
+		},
+	))
+
+	// Report tool results
+	a.reportProgress(NewToolResultEvent(
+		"results_available",
+		fmt.Sprintf("Tool %s returned %d results", selection.Tool.Name, len(results)),
+		&ToolResultProgress{
+			ToolName:   selection.Tool.Name,
+			Results:    results,
+			Success:    true,
+			Duration:   toolDuration,
+			Summarized: selection.Tool.SummarizeContext,
+		},
+	))
 	return results, nil
 }
 
@@ -50,16 +96,14 @@ func (a *Agent) summarizeToolResults(ctx context.Context, resultChunks []*ToolRe
 		return resultChunks, nil
 	}
 
-	summarizedResults := make([]*ToolResultChunk, 0, len(resultChunks))
-
-	for _, result := range resultChunks {
-		if len(result.Sentences) == 0 {
+	summarizeResult := func(chunk *ToolResultChunk) *ToolResultChunk {
+		if len(chunk.Sentences) == 0 {
 			// Skip empty results
-			continue
+			return nil
 		}
 
 		// Join all sentences into a single text
-		combinedText := strings.Join(result.Sentences, " ")
+		combinedText := strings.Join(chunk.Sentences, " ")
 
 		// Create summarization prompt using templates
 		promptData := prompts.SummarizationPromptData{
@@ -70,8 +114,8 @@ func (a *Agent) summarizeToolResults(ctx context.Context, resultChunks []*ToolRe
 		systemPrompt, userPrompt, err := prompts.RenderSummarizationPrompt(promptData)
 		if err != nil {
 			// If template rendering fails, keep the original result
-			summarizedResults = append(summarizedResults, result)
-			continue
+			fmt.Printf("Failed to render summarization prompt: %v\n", err)
+			return chunk
 		}
 
 		messages := []llm.Message{
@@ -94,34 +138,43 @@ func (a *Agent) summarizeToolResults(ctx context.Context, resultChunks []*ToolRe
 
 		if err != nil {
 			// If summarization fails, keep the original result
-			summarizedResults = append(summarizedResults, result)
-			continue
+			fmt.Printf("Failed to summarize tool result: %v\n", err)
+			return chunk
 		}
 
 		summary := strings.TrimSpace(responseContent.String())
 
 		// Drop irrelevant content
 		if strings.ToUpper(summary) == "IRRELEVANT" {
-			continue
+			return nil
 		}
 
 		// Create new summarized result
 		summarizedResult := &ToolResultChunk{
 			Sentences:   []string{summary},
-			Attribution: result.Attribution, // Preserve attributions
-			Title:       result.Title,
+			Attribution: chunk.Attribution, // Preserve attributions
+			Title:       chunk.Title,
 			Metadata:    make(map[string]interface{}),
 		}
 
 		// Copy metadata and add summarization info
-		for k, v := range result.Metadata {
-			summarizedResult.Metadata[k] = v
-		}
+		maps.Copy(summarizedResult.Metadata, chunk.Metadata)
 		summarizedResult.Metadata["summarized"] = true
-		summarizedResult.Metadata["original_sentence_count"] = len(result.Sentences)
+		summarizedResult.Metadata["original_sentence_count"] = len(chunk.Sentences)
 
-		summarizedResults = append(summarizedResults, summarizedResult)
+		return summarizedResult
 	}
 
-	return summarizedResults, nil
+	summarizedResults, err := linq.Pipe3(
+		linq.FromSlice(ctx, resultChunks),
+		linq.SelectPar(func(chunk *ToolResultChunk) *ToolResultChunk {
+			return summarizeResult(chunk)
+		}),
+		linq.Where(func(chunk *ToolResultChunk) bool {
+			return chunk != nil // Filter out nil results
+		}),
+		linq.ToSlice[*ToolResultChunk](),
+	)
+
+	return summarizedResults, err
 }

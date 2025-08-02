@@ -146,7 +146,7 @@ func TestGenerateAnswer(t *testing.T) {
 		UseTools: false,
 	}
 
-	response, err := agent.GenerateAnswer(context.Background(), req)
+	response, err := agent.Execute(context.Background(), req)
 	if err != nil {
 		t.Fatalf("GenerateAnswer failed: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestGenerateAnswerWithTools(t *testing.T) {
 		UseTools: true,
 	}
 
-	response, err := agent.GenerateAnswer(context.Background(), req)
+	response, err := agent.Execute(context.Background(), req)
 	if err != nil {
 		t.Fatalf("GenerateAnswer with tools failed: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestMultiResultRAGIntegration(t *testing.T) {
 		UseTools: true,
 	}
 
-	resp, err := agent.GenerateAnswer(ctx, req)
+	resp, err := agent.Execute(ctx, req)
 	if err != nil {
 		t.Fatalf("RAG integration failed: %v", err)
 	}
@@ -454,7 +454,7 @@ func TestMultiResultWebSearchIntegration(t *testing.T) {
 		UseTools: true,
 	}
 
-	resp, err := agent.GenerateAnswer(ctx, req)
+	resp, err := agent.Execute(ctx, req)
 	if err != nil {
 		t.Fatalf("Web search integration failed: %v", err)
 	}
@@ -565,7 +565,7 @@ func TestSummarizeContextFeature(t *testing.T) {
 		UseTools: true,
 	}
 
-	resp, err := agent.GenerateAnswer(ctx, req)
+	resp, err := agent.Execute(ctx, req)
 	if err != nil {
 		t.Fatalf("Summarization test failed: %v", err)
 	}
@@ -680,7 +680,7 @@ func TestSummarizeContextRAGScenario(t *testing.T) {
 		UseTools: true,
 	}
 
-	resp, err := agent.GenerateAnswer(ctx, req)
+	resp, err := agent.Execute(ctx, req)
 	if err != nil {
 		t.Fatalf("RAG summarization test failed: %v", err)
 	}

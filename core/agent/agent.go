@@ -27,9 +27,10 @@ type AgentConfig struct {
 		Client llm.LLMClient
 		Model  string
 	}
-	Tools     []MCPTool
-	Prompts   map[string]PromptTemplate
-	MaxTokens int
+	Tools            []MCPTool
+	Prompts          map[string]PromptTemplate
+	MaxTokens        int
+	ProgressReporter ProgressReporter // Optional progress reporter for streaming updates
 }
 
 // Agent represents the main agent system
@@ -39,19 +40,32 @@ type Agent struct {
 
 // NewAgent creates a new agent instance
 func NewAgent(config AgentConfig) *Agent {
+	// Set default progress reporter if none provided
+	if config.ProgressReporter == nil {
+		config.ProgressReporter = &NoOpProgressReporter{}
+	}
+
 	return &Agent{
 		config: config,
 	}
 }
 
+// reportProgress sends a progress event if a progress reporter is configured
+func (a *Agent) reportProgress(event ProgressEvent) {
+	if a.config.ProgressReporter != nil {
+		a.config.ProgressReporter.ReportProgress(event)
+	}
+}
+
 // GenerateAnswerRequest represents a request for answer generation
 type GenerateAnswerRequest struct {
-	Query          string            `json:"query"`
-	Context        string            `json:"context,omitempty"`
-	PromptTemplate string            `json:"prompt_template,omitempty"`
-	UseTools       bool              `json:"use_tools"`
-	MaxIterations  int               `json:"max_iterations,omitempty"`
-	Metadata       map[string]string `json:"metadata,omitempty"`
+	Query           string            `json:"query"`
+	Context         string            `json:"context,omitempty"`
+	PromptTemplate  string            `json:"prompt_template,omitempty"`
+	UseTools        bool              `json:"use_tools"`
+	MaxIterations   int               `json:"max_iterations,omitempty"`
+	Metadata        map[string]string `json:"metadata,omitempty"`
+	EnableStreaming bool              `json:"enable_streaming,omitempty"` // Enable detailed progress reporting
 }
 
 // GenerateAnswerResponse represents the response from answer generation
@@ -66,7 +80,7 @@ type GenerateAnswerResponse struct {
 }
 
 // GenerateAnswer is the main API to generate answers using tool selection and prompts
-func (a *Agent) GenerateAnswer(ctx context.Context, req GenerateAnswerRequest) (*GenerateAnswerResponse, error) {
+func (a *Agent) Execute(ctx context.Context, req GenerateAnswerRequest) (*GenerateAnswerResponse, error) {
 	startTime := getCurrentTimeMs()
 
 	response := &GenerateAnswerResponse{
@@ -108,12 +122,20 @@ func (a *Agent) GenerateAnswer(ctx context.Context, req GenerateAnswerRequest) (
 				}
 
 				// Process each result from the tool
+				hasSuccessfulResult := false
 				for _, result := range results {
-					toolResultText := a.formatToolResult(selection.Tool.Name, result)
-					toolResults = append(toolResults, toolResultText)
+					if len(result.Sentences) > 0 {
+						hasSuccessfulResult = true
+						// Format the tool result for inclusion in the prompt
+						toolResultText := a.formatToolResult(selection.Tool.Name, result)
+						toolResults = append(toolResults, toolResultText)
+					}
 				}
 
-				response.ToolsUsed = append(response.ToolsUsed, selection)
+				// Only add to tools used if at least one result was successful
+				if hasSuccessfulResult {
+					response.ToolsUsed = append(response.ToolsUsed, selection)
+				}
 			}
 		}
 	}
@@ -138,28 +160,12 @@ func (a *Agent) GenerateAnswer(ctx context.Context, req GenerateAnswerRequest) (
 	response.ModelUsed = modelName
 
 	// Step 4: Generate the final answer
-	messages := []llm.Message{
-		{Role: "user", Content: prompt},
-	}
-
-	var responseContent strings.Builder
-	err := client.GenerateInference(
-		ctx,
-		messages,
-		func(chunk string) error {
-			responseContent.WriteString(chunk)
-			return nil
-		},
-		llm.WithLLMModel(modelName),
-		llm.WithTemperature(0.7),
-		llm.WithMaxTokens(a.getMaxTokens()),
-	)
-
+	finalAnswer, err := a.GenerateAnswer(ctx, client, modelName, prompt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate answer: %w", err)
+		return nil, err
 	}
 
-	response.Answer = responseContent.String()
+	response.Answer = finalAnswer
 	response.ProcessingTime = getCurrentTimeMs() - startTime
 
 	// Add metadata
@@ -210,7 +216,7 @@ func (a *Agent) formatToolResult(toolName string, result *ToolResultChunk) strin
 		}
 	}
 
-	if len(result.Attribution) > 0 {
+	if result.Attribution != "" {
 		formatted.WriteString(fmt.Sprintf("\nSource: %s", result.Attribution))
 	}
 

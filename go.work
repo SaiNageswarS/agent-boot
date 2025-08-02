@@ -2,7 +2,6 @@ go 1.24.4
 
 use (
 	./core
-	./mcp-agent
 	./proto
-	./search-core
+	./example
 )

@@ -32,6 +32,17 @@ func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]To
 		return []ToolSelection{}, nil
 	}
 
+	a.reportProgress(NewToolSelectionEvent(
+		"selection_starting",
+		"Starting tool selection",
+		&ToolSelectionProgress{
+			Query:      req.Query,
+			ToolsCount: len(a.config.Tools),
+			MaxTools:   3,
+			Status:     "starting",
+		},
+	))
+
 	// Create tool descriptions for the prompt
 	toolDescriptions := make([]string, 0, len(a.config.Tools))
 	for _, tool := range a.config.Tools {
@@ -71,6 +82,12 @@ func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]To
 	)
 
 	if err != nil {
+		a.reportProgress(NewErrorEvent(
+			"tool_selection",
+			"Tool selection failed",
+			err.Error(),
+		))
+
 		return nil, fmt.Errorf("failed to select tools: %w", err)
 	}
 
@@ -90,6 +107,16 @@ func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]To
 		}
 	}
 
+	a.reportProgress(NewToolSelectionEvent(
+		"selection_completed",
+		fmt.Sprintf("Selected %d tools", len(selections)),
+		&ToolSelectionProgress{
+			Query:      req.Query,
+			ToolsCount: len(a.config.Tools),
+			MaxTools:   3,
+			Status:     "completed",
+		},
+	))
 	return selections, nil
 }
 

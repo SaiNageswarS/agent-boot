@@ -35,14 +35,12 @@ jobs:
       - name: Build all components
         run: |
           cd proto        && ./build.sh
-          cd ../search-core && ./build.sh
-          cd ../mcp-agent   && ./build.sh
+          cd ../example && ./build.sh
 
       - name: Move all binaries to ./release-bin
         run: |
           mkdir -p release-bin
-          mv search-core/build/* release-bin/
-          mv mcp-agent/build/* release-bin/
+          mv example/build/* release-bin/
           ls -lh release-bin
 
       - name: Upload Go artifacts
@@ -114,7 +112,7 @@ jobs:
           ## Downloads
           
           ### Go Executables
-          - `search-core` - Search Service
+          - `medicine-rag` - Example Medicine RAG Executable
           - `mcp-agent` - Linux mcp Executable
           - `mcp-agent.exe` - Windows mcp Executable
           - pySideCar.zip - Python Temporal Worker

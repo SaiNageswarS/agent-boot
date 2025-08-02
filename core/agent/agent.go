@@ -8,40 +8,8 @@ import (
 	"time"
 
 	"github.com/SaiNageswarS/agent-boot/core/llm"
+	"github.com/SaiNageswarS/agent-boot/core/prompts"
 )
-
-// ToolResult represents a standardized format for tool execution results
-type ToolResult struct {
-	// Primary content - can be multiple sentences or a single result
-	Sentences []string `json:"sentences"`
-
-	// Source attribution - where the information came from
-	Attributions []string `json:"attributions,omitempty"`
-
-	// Title or summary of the result
-	Title string `json:"title,omitempty"`
-
-	// Metadata for additional context
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
-
-	// Success indicator
-	Success bool `json:"success"`
-
-	// Error message if not successful
-	Error string `json:"error,omitempty"`
-}
-
-// MCPTool represents a Model Context Protocol tool
-type MCPTool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Parameters  map[string]interface{} `json:"parameters"`
-	// SummarizeContext enables automatic summarization of tool results using the mini model.
-	// When enabled, each ToolResult's Sentences will be summarized with respect to the user's query.
-	// Irrelevant content will be filtered out, making this ideal for RAG search and web search tools.
-	SummarizeContext bool `json:"summarize_context"`
-	Handler          func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error)
-}
 
 // PromptTemplate represents a reusable prompt template
 type PromptTemplate struct {
@@ -128,7 +96,7 @@ func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]To
 	}
 
 	// Prepare data for template rendering
-	promptData := ToolSelectionPromptData{
+	promptData := prompts.ToolSelectionPromptData{
 		ToolDescriptions: toolDescriptions,
 		MaxTools:         getMaxTools(req.MaxTools),
 		Query:            req.Query,
@@ -136,7 +104,7 @@ func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]To
 	}
 
 	// Render the prompts using embedded Go templates
-	systemPrompt, userPrompt, err := RenderToolSelectionPrompt(promptData)
+	systemPrompt, userPrompt, err := prompts.RenderToolSelectionPrompt(promptData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render tool selection prompt: %w", err)
 	}
@@ -225,20 +193,12 @@ func (a *Agent) GenerateAnswer(ctx context.Context, req GenerateAnswerRequest) (
 				}
 
 				// Process each result from the tool
-				hasSuccessfulResult := false
 				for _, result := range results {
-					if result.Success {
-						hasSuccessfulResult = true
-						// Format the tool result for inclusion in the prompt
-						toolResultText := a.formatToolResult(selection.Tool.Name, result)
-						toolResults = append(toolResults, toolResultText)
-					}
+					toolResultText := a.formatToolResult(selection.Tool.Name, result)
+					toolResults = append(toolResults, toolResultText)
 				}
 
-				// Only add to tools used if at least one result was successful
-				if hasSuccessfulResult {
-					response.ToolsUsed = append(response.ToolsUsed, selection)
-				}
+				response.ToolsUsed = append(response.ToolsUsed, selection)
 			}
 		}
 	}
@@ -438,7 +398,7 @@ func (a *Agent) parseToolBlock(block string) (ToolSelection, error) {
 	}, nil
 }
 
-func (a *Agent) executeTool(ctx context.Context, selection ToolSelection) ([]*ToolResult, error) {
+func (a *Agent) executeTool(ctx context.Context, selection ToolSelection) ([]*ToolResultChunk, error) {
 	results, err := selection.Tool.Handler(ctx, selection.Parameters)
 	if err != nil {
 		return nil, err
@@ -475,17 +435,16 @@ func (a *Agent) executeTool(ctx context.Context, selection ToolSelection) ([]*To
 // - RAG search results that may contain verbose or tangential information
 // - Web search results with mixed relevant/irrelevant content
 // - Large document chunks that need to be condensed for context windows
-func (a *Agent) summarizeToolResults(ctx context.Context, results []*ToolResult, userQuery string) ([]*ToolResult, error) {
-	if len(results) == 0 {
-		return results, nil
+func (a *Agent) summarizeToolResults(ctx context.Context, resultChunks []*ToolResultChunk, userQuery string) ([]*ToolResultChunk, error) {
+	if len(resultChunks) == 0 {
+		return resultChunks, nil
 	}
 
-	summarizedResults := make([]*ToolResult, 0, len(results))
+	summarizedResults := make([]*ToolResultChunk, 0, len(resultChunks))
 
-	for _, result := range results {
-		if !result.Success || len(result.Sentences) == 0 {
-			// Keep unsuccessful results or results without sentences unchanged
-			summarizedResults = append(summarizedResults, result)
+	for _, result := range resultChunks {
+		if len(result.Sentences) == 0 {
+			// Skip empty results
 			continue
 		}
 
@@ -493,12 +452,12 @@ func (a *Agent) summarizeToolResults(ctx context.Context, results []*ToolResult,
 		combinedText := strings.Join(result.Sentences, " ")
 
 		// Create summarization prompt using templates
-		promptData := SummarizationPromptData{
+		promptData := prompts.SummarizationPromptData{
 			Query:   userQuery,
 			Content: combinedText,
 		}
 
-		systemPrompt, userPrompt, err := RenderSummarizationPrompt(promptData)
+		systemPrompt, userPrompt, err := prompts.RenderSummarizationPrompt(promptData)
 		if err != nil {
 			// If template rendering fails, keep the original result
 			summarizedResults = append(summarizedResults, result)
@@ -537,12 +496,11 @@ func (a *Agent) summarizeToolResults(ctx context.Context, results []*ToolResult,
 		}
 
 		// Create new summarized result
-		summarizedResult := &ToolResult{
-			Sentences:    []string{summary},
-			Attributions: result.Attributions, // Preserve attributions
-			Title:        result.Title,
-			Metadata:     make(map[string]interface{}),
-			Success:      true,
+		summarizedResult := &ToolResultChunk{
+			Sentences:   []string{summary},
+			Attribution: result.Attribution, // Preserve attributions
+			Title:       result.Title,
+			Metadata:    make(map[string]interface{}),
 		}
 
 		// Copy metadata and add summarization info
@@ -559,7 +517,7 @@ func (a *Agent) summarizeToolResults(ctx context.Context, results []*ToolResult,
 }
 
 // formatToolResult formats a ToolResult into a human-readable string for prompts
-func (a *Agent) formatToolResult(toolName string, result *ToolResult) string {
+func (a *Agent) formatToolResult(toolName string, result *ToolResultChunk) string {
 	var formatted strings.Builder
 
 	formatted.WriteString(fmt.Sprintf("Tool %s result:", toolName))
@@ -575,11 +533,8 @@ func (a *Agent) formatToolResult(toolName string, result *ToolResult) string {
 		}
 	}
 
-	if len(result.Attributions) > 0 {
-		formatted.WriteString("\nSources:")
-		for _, attribution := range result.Attributions {
-			formatted.WriteString(fmt.Sprintf("\n- %s", attribution))
-		}
+	if len(result.Attribution) > 0 {
+		formatted.WriteString(fmt.Sprintf("\nSource: %s", result.Attribution))
 	}
 
 	if len(result.Metadata) > 0 {
@@ -590,115 +545,6 @@ func (a *Agent) formatToolResult(toolName string, result *ToolResult) string {
 	}
 
 	return formatted.String()
-}
-
-// NewToolResult creates a new successful ToolResult
-func NewToolResult(title string, sentences []string) *ToolResult {
-	return &ToolResult{
-		Title:     title,
-		Sentences: sentences,
-		Success:   true,
-		Metadata:  make(map[string]interface{}),
-	}
-}
-
-// NewSingleToolResult creates a slice with a single ToolResult for simple tools
-func NewSingleToolResult(title string, sentences []string) []*ToolResult {
-	return []*ToolResult{NewToolResult(title, sentences)}
-}
-
-// NewToolResultWithAttribution creates a ToolResult with attribution
-func NewToolResultWithAttribution(title string, sentences []string, attributions []string) *ToolResult {
-	return &ToolResult{
-		Title:        title,
-		Sentences:    sentences,
-		Attributions: attributions,
-		Success:      true,
-		Metadata:     make(map[string]interface{}),
-	}
-}
-
-// NewToolResultError creates a failed ToolResult
-func NewToolResultError(errorMsg string) *ToolResult {
-	return &ToolResult{
-		Success: false,
-		Error:   errorMsg,
-	}
-}
-
-// NewSingleToolResultError creates a slice with a single error ToolResult
-func NewSingleToolResultError(errorMsg string) []*ToolResult {
-	return []*ToolResult{NewToolResultError(errorMsg)}
-}
-
-// NewMathToolResult creates a ToolResult specifically for mathematical calculations
-func NewMathToolResult(expression string, result string, steps []string) []*ToolResult {
-	sentences := []string{fmt.Sprintf("%s = %s", expression, result)}
-	if len(steps) > 0 {
-		sentences = append(sentences, "Calculation steps:")
-		sentences = append(sentences, steps...)
-	}
-
-	toolResult := NewToolResult("Mathematical Calculation", sentences)
-	toolResult.Metadata["expression"] = expression
-	toolResult.Metadata["result"] = result
-	toolResult.Metadata["calculation_type"] = "arithmetic"
-
-	return []*ToolResult{toolResult}
-}
-
-// NewDateTimeToolResult creates a ToolResult for date/time operations
-func NewDateTimeToolResult(operation string, result string, timezone string) []*ToolResult {
-	sentences := []string{fmt.Sprintf("%s: %s", operation, result)}
-
-	toolResult := NewToolResult("Date/Time Operation", sentences)
-	toolResult.Metadata["operation"] = operation
-	toolResult.Metadata["timezone"] = timezone
-	toolResult.Metadata["timestamp"] = time.Now().Unix()
-
-	return []*ToolResult{toolResult}
-}
-
-// NewSearchToolResult creates a ToolResult for search operations
-func NewSearchToolResult(query string, results []string, sources []string) []*ToolResult {
-	sentences := make([]string, 0, len(results)+1)
-	sentences = append(sentences, fmt.Sprintf("Search results for: %s", query))
-	sentences = append(sentences, results...)
-
-	toolResult := NewToolResultWithAttribution("Search Results", sentences, sources)
-	toolResult.Metadata["query"] = query
-	toolResult.Metadata["result_count"] = len(results)
-
-	return []*ToolResult{toolResult}
-}
-
-// NewMultiSearchToolResult creates multiple ToolResults for search operations with separate sources
-func NewMultiSearchToolResult(query string, resultPairs []SearchResultPair) []*ToolResult {
-	results := make([]*ToolResult, 0, len(resultPairs))
-
-	for i, pair := range resultPairs {
-		sentences := []string{pair.Content}
-		attributions := []string{pair.Source}
-
-		toolResult := NewToolResultWithAttribution(
-			fmt.Sprintf("Search Result %d", i+1),
-			sentences,
-			attributions,
-		)
-		toolResult.Metadata["query"] = query
-		toolResult.Metadata["result_index"] = i
-		toolResult.Metadata["source"] = pair.Source
-
-		results = append(results, toolResult)
-	}
-
-	return results
-}
-
-// SearchResultPair represents a search result with its content and source
-type SearchResultPair struct {
-	Content string
-	Source  string
 }
 
 func (a *Agent) getPrompt(templateName, query, context string, toolResults []string) string {

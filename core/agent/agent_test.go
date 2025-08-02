@@ -81,8 +81,8 @@ func TestAddTool(t *testing.T) {
 	tool := MCPTool{
 		Name:        "test-tool",
 		Description: "A test tool",
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error) {
-			return NewSingleToolResult("Test", []string{"result"}), nil
+		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
+			return []*ToolResultChunk{NewToolResult("Test", []string{"result"})}, nil
 		},
 	}
 
@@ -170,7 +170,7 @@ TOOL_SELECTION_END
 			{
 				Name:        "calculator",
 				Description: "Performs calculations",
-				Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error) {
+				Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
 					return NewMathToolResult("2+2", "4", nil), nil
 				},
 			},
@@ -201,56 +201,14 @@ TOOL_SELECTION_END
 	}
 }
 
-func TestSelectToolsWithJSONFallback(t *testing.T) {
-	// Mock LLM response in JSON format
-	mockResponse := `[{"tool_name": "search", "confidence": 0.8, "reasoning": "User needs information", "parameters": {"query": "test"}}]`
-
-	agent := NewAgent(AgentConfig{
-		MiniModel: struct {
-			Client llm.LLMClient
-			Model  string
-		}{
-			Client: &mockLLMClient{response: mockResponse},
-			Model:  "test-model",
-		},
-		Tools: []MCPTool{
-			{
-				Name:        "search",
-				Description: "Searches for information",
-				Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error) {
-					return NewSearchToolResult("test", []string{"result"}, []string{"source"}), nil
-				},
-			},
-		},
-	})
-
-	req := ToolSelectionRequest{
-		Query:    "Find information about AI",
-		MaxTools: 1,
-	}
-
-	selections, err := agent.SelectTools(context.Background(), req)
-	if err != nil {
-		t.Fatalf("SelectTools failed: %v", err)
-	}
-
-	if len(selections) != 1 {
-		t.Fatalf("Expected 1 selection, got %d", len(selections))
-	}
-
-	if selections[0].Tool.Name != "search" {
-		t.Errorf("Expected tool 'search', got '%s'", selections[0].Tool.Name)
-	}
-}
-
 func TestExecuteTool(t *testing.T) {
 	handlerCalled := false
 	tool := MCPTool{
 		Name:        "test-tool",
 		Description: "Test tool",
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error) {
+		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
 			handlerCalled = true
-			return NewSingleToolResult("Test Result", []string{"Success"}), nil
+			return []*ToolResultChunk{NewToolResult("Test Result", []string{"Success"})}, nil
 		},
 	}
 
@@ -271,10 +229,6 @@ func TestExecuteTool(t *testing.T) {
 
 	if len(results) != 1 {
 		t.Fatalf("Expected 1 result, got %d", len(results))
-	}
-
-	if !results[0].Success {
-		t.Error("Result should be successful")
 	}
 
 	if results[0].Title != "Test Result" {
@@ -355,7 +309,7 @@ func TestGenerateAnswerWithTools(t *testing.T) {
 			{
 				Name:        "calculator",
 				Description: "Performs calculations",
-				Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error) {
+				Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
 					return NewMathToolResult("2+2", "4", []string{"2 + 2 = 4"}), nil
 				},
 			},
@@ -486,26 +440,23 @@ func TestMultiResultRAGIntegration(t *testing.T) {
 	ragTool := MCPTool{
 		Name:        "rag_search",
 		Description: "Search knowledge base and return multiple relevant documents",
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error) {
+		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
 			// Simulate RAG returning multiple relevant documents
-			return []*ToolResult{
+			return []*ToolResultChunk{
 				{
-					Sentences:    []string{"Machine learning is a subset of artificial intelligence that enables computers to learn without being explicitly programmed."},
-					Attributions: []string{"AI Fundamentals Textbook, Chapter 3"},
-					Title:        "Introduction to Machine Learning",
-					Success:      true,
+					Sentences:   []string{"Machine learning is a subset of artificial intelligence that enables computers to learn without being explicitly programmed."},
+					Attribution: "AI Fundamentals Textbook, Chapter 3",
+					Title:       "Introduction to Machine Learning",
 				},
 				{
-					Sentences:    []string{"Deep learning uses neural networks with multiple layers to model and understand complex patterns in data."},
-					Attributions: []string{"Neural Networks Research Paper, 2020"},
-					Title:        "Deep Learning Architectures",
-					Success:      true,
+					Sentences:   []string{"Deep learning uses neural networks with multiple layers to model and understand complex patterns in data."},
+					Attribution: "Neural Networks Research Paper, 2020",
+					Title:       "Deep Learning Architectures",
 				},
 				{
-					Sentences:    []string{"Supervised learning algorithms learn from labeled training data to make predictions on new, unseen data."},
-					Attributions: []string{"Machine Learning Handbook, Section 4.2"},
-					Title:        "Supervised Learning Methods",
-					Success:      true,
+					Sentences:   []string{"Supervised learning algorithms learn from labeled training data to make predictions on new, unseen data."},
+					Attribution: "Machine Learning Handbook, Section 4.2",
+					Title:       "Supervised Learning Methods",
 				},
 			}, nil
 		},
@@ -590,24 +541,24 @@ func TestMultiResultWebSearchIntegration(t *testing.T) {
 	webSearchTool := MCPTool{
 		Name:        "web_search",
 		Description: "Search the web and return multiple relevant results",
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error) {
+		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
 			// Simulate web search returning multiple sources using the helper function
-			searchResults := []SearchResultPair{
+			searchResults := []*ToolResultChunk{
 				{
-					Content: "Go is an open source programming language developed by Google. It's designed for building simple, reliable, and efficient software.",
-					Source:  "https://golang.org/doc/",
+					Sentences:   []string{"Go is an open source programming language developed by Google. It's designed for building simple, reliable, and efficient software."},
+					Attribution: "https://golang.org/doc/",
 				},
 				{
-					Content: "Go (Golang) is a statically typed, compiled programming language. It has excellent concurrency support and fast compilation times.",
-					Source:  "https://en.wikipedia.org/wiki/Go_(programming_language)",
+					Sentences:   []string{"Go (Golang) is a statically typed, compiled programming language. It has excellent concurrency support and fast compilation times."},
+					Attribution: "https://en.wikipedia.org/wiki/Go_(programming_language)",
 				},
 				{
-					Content: "Go's syntax is clean and easy to learn. It has built-in garbage collection and strong standard library support for web development.",
-					Source:  "https://go.dev/learn/",
+					Sentences:   []string{"Go's syntax is clean and easy to learn. It has built-in garbage collection and strong standard library support for web development."},
+					Attribution: "https://go.dev/learn/",
 				},
 			}
 
-			return NewMultiSearchToolResult("What is the Go programming language?", searchResults), nil
+			return searchResults, nil
 		},
 	}
 
@@ -694,9 +645,9 @@ func TestSummarizeContextFeature(t *testing.T) {
 		Name:             "summarized_search",
 		Description:      "Search with automatic summarization",
 		SummarizeContext: true,
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error) {
+		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
 			// Simulate verbose search results that need summarization
-			return []*ToolResult{
+			return []*ToolResultChunk{
 				{
 					Sentences: []string{
 						"Machine learning is a branch of artificial intelligence.",
@@ -705,9 +656,8 @@ func TestSummarizeContextFeature(t *testing.T) {
 						"The field has grown rapidly in recent years.",
 						"Many companies now use machine learning for business insights.",
 					},
-					Attributions: []string{"AI Research Paper"},
-					Title:        "Machine Learning Overview",
-					Success:      true,
+					Attribution: "AI Research Paper",
+					Title:       "Machine Learning Overview",
 				},
 				{
 					Sentences: []string{
@@ -716,9 +666,8 @@ func TestSummarizeContextFeature(t *testing.T) {
 						"Supervised learning uses labeled training data.",
 						"Tomorrow's forecast shows possible rain.",
 					},
-					Attributions: []string{"Mixed Content Source"},
-					Title:        "Mixed Content",
-					Success:      true,
+					Attribution: "Mixed Content Source",
+					Title:       "Mixed Content",
 				},
 			}, nil
 		},
@@ -800,9 +749,9 @@ func TestSummarizeContextRAGScenario(t *testing.T) {
 		Name:             "rag_search",
 		Description:      "Search knowledge base with smart summarization",
 		SummarizeContext: true,
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResult, error) {
+		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
 			// Simulate detailed RAG results with lots of text that needs summarization
-			return []*ToolResult{
+			return []*ToolResultChunk{
 				{
 					Sentences: []string{
 						"Machine learning is a method of data analysis that automates analytical model building.",
@@ -811,9 +760,8 @@ func TestSummarizeContextRAGScenario(t *testing.T) {
 						"The algorithms are used in a wide variety of applications, such as medicine, email filtering, speech recognition, and computer vision.",
 						"Machine learning is closely related to computational statistics, which focuses on making predictions using computers.",
 					},
-					Attributions: []string{"ML Textbook Chapter 1"},
-					Title:        "Machine Learning Fundamentals",
-					Success:      true,
+					Attribution: "ML Textbook Chapter 1",
+					Title:       "Machine Learning Fundamentals",
 				},
 				{
 					Sentences: []string{
@@ -823,9 +771,8 @@ func TestSummarizeContextRAGScenario(t *testing.T) {
 						"The effectiveness of machine learning depends on the quality and quantity of training data.",
 						"Common evaluation metrics include accuracy, precision, recall, and F1-score.",
 					},
-					Attributions: []string{"Advanced ML Research Paper"},
-					Title:        "ML Training and Evaluation",
-					Success:      true,
+					Attribution: "Advanced ML Research Paper",
+					Title:       "ML Training and Evaluation",
 				},
 				{
 					Sentences: []string{
@@ -834,9 +781,8 @@ func TestSummarizeContextRAGScenario(t *testing.T) {
 						"A new restaurant opened downtown offering Mediterranean cuisine.",
 						"Traffic conditions are heavy on the main highway.",
 					},
-					Attributions: []string{"Random News Feed"},
-					Title:        "Unrelated Content",
-					Success:      true,
+					Attribution: "Random News Feed",
+					Title:       "Unrelated Content",
 				},
 			}, nil
 		},

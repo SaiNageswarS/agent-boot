@@ -1,63 +1,89 @@
 syntax = "proto3";
 
-import "search.proto";
+option go_package = "agent-boot/proto/schema";
 
-option go_package = "agent-boot/proto/generated";
-
-package search;
+package agent;
 
 service Agent {
-    rpc CallAgent(AgentInput) returns (stream AgentStreamChunk) {}
+    rpc Execute(GenerateAnswerRequest) returns (stream AgentStreamChunk) {}
 }
 
-message AgentInput {
-    string text = 1;
-    string sessionId = 2;
-    string model = 3; // claude or llama
+message GenerateAnswerRequest {
+    string question = 1;
+    string context = 2;
+    int32 maxIterations = 3;
+    map<string, string> metadata = 4;
 }
 
 message AgentStreamChunk {
     oneof chunk_type {
-        StreamMetadata metadata = 1;
-        SearchRequestChunk search_request = 2;
-        SearchResultsChunk search_results = 3;
-        AnswerChunk answer = 4;
-        StreamComplete complete = 5;
-        StreamError error = 6;
+        ProgressUpdateChunk      progressUpdateChunk = 1;
+        SelectedTool             selectedTool        = 2;
+        ToolExecutionResultChunk toolExecutionResultChunk = 3;
+        AnswerChunk              answer = 4;
+        StreamComplete           complete = 5;
+        StreamError              error = 6;
     }
 }
 
-message StreamMetadata {
-    string status = 1;
-    int32 estimated_results = 2;
-    int32 estimated_queries = 3;
+// Progress / metadata updates
+enum Stage {
+    tool_selection_starting = 0;
+    tool_selection_completed = 1;
+    tool_selection_failed = 2;
+    tool_execution_starting = 3;
+    tool_execution_failed = 4;
+    tool_execution_completed = 5;
+    tool_results_available = 6;
+    answer_generation_starting = 7;
+    answer_generation_failed = 8;
+    answer_generation_completed = 9;
 }
 
-
-message SearchRequestChunk {
-    repeated string queries = 1;
-    int32 chunk_index = 2;
-    bool is_final_chunk = 3;
+message ProgressUpdateChunk {
+    Stage stage = 1;
+    int64 timestamp = 2;
+    string message = 3;
+    int32 currentStep = 4;
+    int32 estimatedSteps = 5;
 }
 
-message SearchResultsChunk {
-    repeated SearchResult results = 1;
-    int32 chunk_index = 2;
-    int32 total_chunks = 3;
-    bool is_final_chunk = 4;
+// Tool Selection Result
+message SelectedTool {
+    string name = 1;
+    map<string, string> parameters = 2;
+    string query = 3;
 }
 
+// Raw result chunk of a single tool.
+// A single tool can emit multiple ToolExecutionResultChunk.
+message ToolExecutionResultChunk {
+    repeated string sentences = 1;
+    string attribution = 2;
+    string title = 3;
+    map<string, string> metadata = 4;
+    string toolName = 5;
+    string error = 6;
+}
+
+// Final Answer Chunk
 message AnswerChunk {
-    string content = 1;
-    bool is_final = 2;
+    string answer = 1;
+    repeated string toolsUsed = 2;
+    int32 tokenUsed = 3;
+    int64 processingTime = 4;
+    string promptUsed = 5;
+    string modelUsed = 6;
+    map<string, string> metadata = 7;
+    bool is_final = 8;
 }
 
+// End of Streaming.
 message StreamComplete {
     string final_status = 1;
-    int32 total_results_sent = 2;
-    int32 total_queries_sent = 3;
 }
 
+// Error chunk
 message StreamError {
     string error_message = 1;
     string error_code = 2;

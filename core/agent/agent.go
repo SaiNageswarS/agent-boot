@@ -3,10 +3,15 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"agent-boot/proto/schema"
+
 	"github.com/SaiNageswarS/agent-boot/core/llm"
+	"github.com/SaiNageswarS/go-api-boot/logger"
+	"go.uber.org/zap"
 )
 
 // PromptTemplate represents a reusable prompt template
@@ -27,125 +32,108 @@ type AgentConfig struct {
 		Client llm.LLMClient
 		Model  string
 	}
-	Tools            []MCPTool
-	Prompts          map[string]PromptTemplate
-	MaxTokens        int
-	ProgressReporter ProgressReporter // Optional progress reporter for streaming updates
+	Tools     []MCPTool
+	Prompt    PromptTemplate
+	MaxTokens int
 }
 
 // Agent represents the main agent system
 type Agent struct {
+	schema.UnimplementedAgentServer
 	config AgentConfig
 }
 
 // NewAgent creates a new agent instance
 func NewAgent(config AgentConfig) *Agent {
-	// Set default progress reporter if none provided
-	if config.ProgressReporter == nil {
-		config.ProgressReporter = &NoOpProgressReporter{}
-	}
-
 	return &Agent{
 		config: config,
 	}
 }
 
-// reportProgress sends a progress event if a progress reporter is configured
-func (a *Agent) reportProgress(event ProgressEvent) {
-	if a.config.ProgressReporter != nil {
-		a.config.ProgressReporter.ReportProgress(event)
-	}
-}
-
-// GenerateAnswerRequest represents a request for answer generation
-type GenerateAnswerRequest struct {
-	Query           string            `json:"query"`
-	Context         string            `json:"context,omitempty"`
-	PromptTemplate  string            `json:"prompt_template,omitempty"`
-	UseTools        bool              `json:"use_tools"`
-	MaxIterations   int               `json:"max_iterations,omitempty"`
-	Metadata        map[string]string `json:"metadata,omitempty"`
-	EnableStreaming bool              `json:"enable_streaming,omitempty"` // Enable detailed progress reporting
-}
-
-// GenerateAnswerResponse represents the response from answer generation
-type GenerateAnswerResponse struct {
-	Answer         string                 `json:"answer"`
-	ToolsUsed      []ToolSelection        `json:"tools_used"`
-	PromptUsed     string                 `json:"prompt_used"`
-	ModelUsed      string                 `json:"model_used"`
-	TokensUsed     int                    `json:"tokens_used"`
-	ProcessingTime int64                  `json:"processing_time_ms"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
-}
-
 // GenerateAnswer is the main API to generate answers using tool selection and prompts
-func (a *Agent) Execute(ctx context.Context, req GenerateAnswerRequest) (*GenerateAnswerResponse, error) {
+func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *schema.GenerateAnswerRequest) (*schema.AnswerChunk, error) {
 	startTime := getCurrentTimeMs()
 
-	response := &GenerateAnswerResponse{
-		ToolsUsed: make([]ToolSelection, 0),
-		Metadata:  make(map[string]interface{}),
+	response := &schema.AnswerChunk{
+		ToolsUsed: make([]string, 0),
+		Metadata:  make(map[string]string),
 	}
 
 	var toolResults []string
 
 	// Step 1: Select and execute tools if requested
-	if req.UseTools {
+	if len(a.config.Tools) > 0 {
 		toolSelectionReq := ToolSelectionRequest{
-			Query:    req.Query,
+			Query:    req.Question,
 			Context:  req.Context,
 			MaxTools: 3, // Default max tools
 		}
 
+		reporter.Send(NewProgressUpdate(
+			schema.Stage_tool_selection_starting,
+			"Selecting tools for query: "+req.Question,
+			1,
+		))
+
 		selectedTools, err := a.SelectTools(ctx, toolSelectionReq)
 		if err != nil {
 			// Tool selection failed, continuing without tools
+			logger.Error("Tool selection failed", zap.Error(err))
+			reporter.Send(NewStreamError(err.Error(), "Tool selection error"))
 		} else {
+			reporter.Send(NewProgressUpdate(
+				schema.Stage_tool_selection_completed,
+				fmt.Sprintf("Selected %d tools for query: %s", len(selectedTools), req.Question),
+				1,
+			))
+
+			for _, selection := range selectedTools {
+				reporter.Send(NewToolSelectionResult(selection))
+			}
+
 			// Execute selected tools
 			for _, selection := range selectedTools {
-				// Add user query to parameters for summarization context
-				if selection.Tool.SummarizeContext {
-					if selection.Parameters == nil {
-						selection.Parameters = make(map[string]interface{})
-					}
-					// Only add query if not already present
-					if _, exists := selection.Parameters["query"]; !exists {
-						selection.Parameters["query"] = req.Query
-					}
-				}
+				reporter.Send(NewProgressUpdate(
+					schema.Stage_tool_execution_starting,
+					fmt.Sprintf("Executing tool: %s", selection.Name),
+					2,
+				))
 
-				results, err := a.ExecuteTool(ctx, selection)
-				if err != nil {
-					// Tool execution failed, skip this tool
-					continue
-				}
+				toolResultChan := a.ExecuteTool(ctx, selection)
 
 				// Process each result from the tool
-				hasSuccessfulResult := false
-				for _, result := range results {
-					if len(result.Sentences) > 0 {
-						hasSuccessfulResult = true
-						// Format the tool result for inclusion in the prompt
-						toolResultText := a.formatToolResult(selection.Tool.Name, result)
-						toolResults = append(toolResults, toolResultText)
+				for toolResult := range toolResultChan {
+					if toolResult.Error != "" {
+						logger.Error("Tool execution error", zap.String("tool", selection.Name), zap.Error(fmt.Errorf(toolResult.Error)))
+						reporter.Send(NewStreamError(toolResult.Error, fmt.Sprintf("Error executing tool %s", selection.Name)))
+						continue
 					}
-				}
 
-				// Only add to tools used if at least one result was successful
-				if hasSuccessfulResult {
-					response.ToolsUsed = append(response.ToolsUsed, selection)
+					reporter.Send(NewToolExecutionResult(selection.Name, toolResult))
+
+					if len(toolResult.Sentences) > 0 {
+						// Format the tool result for inclusion in the prompt
+						toolResultText := a.formatToolResult(selection.Name, toolResult)
+						toolResults = append(toolResults, toolResultText)
+						response.ToolsUsed = append(response.ToolsUsed, selection.Name)
+					}
 				}
 			}
 		}
 	}
 
 	// Step 2: Get or create the prompt
-	prompt := a.getPrompt(req.PromptTemplate, req.Query, req.Context, toolResults)
+	reporter.Send(NewProgressUpdate(
+		schema.Stage_answer_generation_starting,
+		"Generating answer...",
+		3,
+	))
+
+	prompt := a.getPrompt(req.Question, req.Context, toolResults)
 	response.PromptUsed = prompt
 
 	// Step 3: Decide which model to use based on complexity
-	useBigModel := a.shouldUseBigModel(req.Query, toolResults)
+	useBigModel := a.shouldUseBigModel(req.Question, toolResults)
 	var client llm.LLMClient
 	var modelName string
 
@@ -162,6 +150,8 @@ func (a *Agent) Execute(ctx context.Context, req GenerateAnswerRequest) (*Genera
 	// Step 4: Generate the final answer
 	finalAnswer, err := a.GenerateAnswer(ctx, client, modelName, prompt)
 	if err != nil {
+		logger.Error("Answer generation failed", zap.Error(err))
+		reporter.Send(NewStreamError(err.Error(), "Answer generation error"))
 		return nil, err
 	}
 
@@ -169,76 +159,37 @@ func (a *Agent) Execute(ctx context.Context, req GenerateAnswerRequest) (*Genera
 	response.ProcessingTime = getCurrentTimeMs() - startTime
 
 	// Add metadata
-	response.Metadata["tool_count"] = len(response.ToolsUsed)
-	response.Metadata["has_context"] = req.Context != ""
-	response.Metadata["used_big_model"] = useBigModel
+	response.Metadata["tool_count"] = string(len(response.ToolsUsed))
+	response.Metadata["has_context"] = strconv.FormatBool(req.Context != "")
+	response.Metadata["used_big_model"] = strconv.FormatBool(useBigModel)
 
+	reporter.Send(NewProgressUpdate(
+		schema.Stage_answer_generation_completed,
+		"Answer generation completed successfully",
+		3,
+	))
+
+	reporter.Send(NewAnswerChunk(response.Answer, response.ToolsUsed, response.TokenUsed, response.PromptUsed, response.ModelUsed, response.Metadata, true))
+	reporter.Send(NewStreamComplete("Answer generation completed"))
 	return response, nil
 }
 
-// AddTool adds a new MCP tool to the agent
-func (a *Agent) AddTool(tool MCPTool) {
-	a.config.Tools = append(a.config.Tools, tool)
-}
-
-// AddPrompt adds a new prompt template to the agent
-func (a *Agent) AddPrompt(name string, template PromptTemplate) {
-	if a.config.Prompts == nil {
-		a.config.Prompts = make(map[string]PromptTemplate)
-	}
-	a.config.Prompts[name] = template
-}
-
-// GetAvailableTools returns a list of all available tools
-func (a *Agent) GetAvailableTools() []MCPTool {
-	return a.config.Tools
-}
-
-// GetAvailablePrompts returns a list of all available prompt templates
-func (a *Agent) GetAvailablePrompts() map[string]PromptTemplate {
-	return a.config.Prompts
-}
-
-// formatToolResult formats a ToolResult into a human-readable string for prompts
-func (a *Agent) formatToolResult(toolName string, result *ToolResultChunk) string {
-	var formatted strings.Builder
-
-	formatted.WriteString(fmt.Sprintf("Tool %s result:", toolName))
-
-	if result.Title != "" {
-		formatted.WriteString(fmt.Sprintf("\nTitle: %s", result.Title))
-	}
-
-	if len(result.Sentences) > 0 {
-		formatted.WriteString("\nContent:")
-		for _, sentence := range result.Sentences {
-			formatted.WriteString(fmt.Sprintf("\n- %s", sentence))
+func (a *Agent) GetToolByName(name string) *MCPTool {
+	for _, tool := range a.config.Tools {
+		if tool.Name == name {
+			return &tool
 		}
 	}
-
-	if result.Attribution != "" {
-		formatted.WriteString(fmt.Sprintf("\nSource: %s", result.Attribution))
-	}
-
-	if len(result.Metadata) > 0 {
-		formatted.WriteString("\nAdditional Info:")
-		for key, value := range result.Metadata {
-			formatted.WriteString(fmt.Sprintf("\n- %s: %v", key, value))
-		}
-	}
-
-	return formatted.String()
+	return nil
 }
 
-func (a *Agent) getPrompt(templateName, query, context string, toolResults []string) string {
-	if templateName != "" {
-		if template, exists := a.config.Prompts[templateName]; exists {
-			return a.fillPromptTemplate(template, map[string]string{
-				"query":        query,
-				"context":      context,
-				"tool_results": strings.Join(toolResults, "\n"),
-			})
-		}
+func (a *Agent) getPrompt(query, context string, toolResults []string) string {
+	if a.config.Prompt.Template != "" {
+		return a.fillPromptTemplate(a.config.Prompt, map[string]string{
+			"query":        query,
+			"context":      context,
+			"tool_results": strings.Join(toolResults, "\n"),
+		})
 	}
 
 	// Default prompt
@@ -295,6 +246,47 @@ func (a *Agent) shouldUseBigModel(query string, toolResults []string) bool {
 	}
 
 	return false
+}
+
+// AddTool adds a new MCP tool to the agent
+func (a *Agent) AddTool(tool MCPTool) {
+	a.config.Tools = append(a.config.Tools, tool)
+}
+
+// GetAvailableTools returns a list of all available tools
+func (a *Agent) GetAvailableTools() []MCPTool {
+	return a.config.Tools
+}
+
+// formatToolResult formats a ToolResult into a human-readable string for prompts
+func (a *Agent) formatToolResult(toolName string, result *schema.ToolExecutionResultChunk) string {
+	var formatted strings.Builder
+
+	formatted.WriteString(fmt.Sprintf("Tool %s result:", toolName))
+
+	if result.Title != "" {
+		formatted.WriteString(fmt.Sprintf("\nTitle: %s", result.Title))
+	}
+
+	if len(result.Sentences) > 0 {
+		formatted.WriteString("\nContent:")
+		for _, sentence := range result.Sentences {
+			formatted.WriteString(fmt.Sprintf("\n- %s", sentence))
+		}
+	}
+
+	if result.Attribution != "" {
+		formatted.WriteString(fmt.Sprintf("\nSource: %s", result.Attribution))
+	}
+
+	if len(result.Metadata) > 0 {
+		formatted.WriteString("\nAdditional Info:")
+		for key, value := range result.Metadata {
+			formatted.WriteString(fmt.Sprintf("\n- %s: %v", key, value))
+		}
+	}
+
+	return formatted.String()
 }
 
 func (a *Agent) getMaxTokens() int {

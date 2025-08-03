@@ -1,82 +1,39 @@
 package agent
 
 import (
+	"agent-boot/proto/schema"
 	"context"
-	"fmt"
 	"maps"
 	"strings"
-	"time"
 
 	"github.com/SaiNageswarS/agent-boot/core/llm"
 	"github.com/SaiNageswarS/agent-boot/core/prompts"
-	"github.com/SaiNageswarS/go-collection-boot/linq"
+	"github.com/SaiNageswarS/go-api-boot/logger"
+	"go.uber.org/zap"
 )
 
-func (a *Agent) ExecuteTool(ctx context.Context, selection ToolSelection) ([]*ToolResultChunk, error) {
-	a.reportProgress(NewToolExecutionEvent(
-		"execution_starting",
-		fmt.Sprintf("Starting execution of tool: %s", selection.Tool.Name),
-		&ToolExecutionProgress{
-			ToolName:   selection.Tool.Name,
-			Parameters: selection.Parameters,
-			Status:     "starting",
-		},
-	))
+func (a *Agent) ExecuteTool(ctx context.Context, selection *schema.SelectedTool) <-chan *schema.ToolExecutionResultChunk {
+	out := make(chan *schema.ToolExecutionResultChunk, 1)
+	defer close(out)
 
-	toolStartTime := time.Now()
-	results, err := selection.Tool.Handler(ctx, selection.Parameters)
-	if err != nil {
-		a.reportProgress(NewErrorEvent(
-			"tool_execution",
-			fmt.Sprintf("Tool %s execution failed", selection.Tool.Name),
-			err.Error(),
-		))
+	tool := a.GetToolByName(selection.Name)
 
-		return nil, err
+	// Execute the tool handler
+	toolResultChan := tool.Handler(ctx, selection.Parameters)
+
+	for toolResult := range toolResultChan {
+		// Summarize the result if the tool has summarization enabled
+		if tool.SummarizeContext {
+			summarizedResult := a.summarizeResult(ctx, toolResult, selection.Query)
+			if summarizedResult != nil {
+				out <- summarizedResult
+			}
+		} else {
+			out <- toolResult
+		}
 	}
 
-	// Apply summarization if enabled for this tool
-	if selection.Tool.SummarizeContext {
-		// Get the user query from context metadata if available
-		query := ""
-		if queryParam, ok := selection.Parameters["query"].(string); ok {
-			query = queryParam
-		}
-
-		summarizedResults, err := a.summarizeToolResults(ctx, results, query)
-		if err != nil {
-			// If summarization fails, return original results
-			return results, nil
-		}
-		return summarizedResults, nil
-	}
-
-	toolDuration := time.Since(toolStartTime)
-
-	// Report tool execution completed with results
-	a.reportProgress(NewToolExecutionEvent(
-		"execution_completed",
-		fmt.Sprintf("Tool execution completed: %s", selection.Tool.Name),
-		&ToolExecutionProgress{
-			ToolName:   selection.Tool.Name,
-			Parameters: selection.Parameters,
-			Status:     "completed",
-		},
-	))
-
-	// Report tool results
-	a.reportProgress(NewToolResultEvent(
-		"results_available",
-		fmt.Sprintf("Tool %s returned %d results", selection.Tool.Name, len(results)),
-		&ToolResultProgress{
-			ToolName:   selection.Tool.Name,
-			Results:    results,
-			Success:    true,
-			Duration:   toolDuration,
-			Summarized: selection.Tool.SummarizeContext,
-		},
-	))
-	return results, nil
+	return out
 }
 
 // summarizeToolResults summarizes tool results using the mini model to make them more relevant and concise.
@@ -91,90 +48,73 @@ func (a *Agent) ExecuteTool(ctx context.Context, selection ToolSelection) ([]*To
 // - RAG search results that may contain verbose or tangential information
 // - Web search results with mixed relevant/irrelevant content
 // - Large document chunks that need to be condensed for context windows
-func (a *Agent) summarizeToolResults(ctx context.Context, resultChunks []*ToolResultChunk, userQuery string) ([]*ToolResultChunk, error) {
-	if len(resultChunks) == 0 {
-		return resultChunks, nil
+func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolExecutionResultChunk, userQuery string) *schema.ToolExecutionResultChunk {
+	if len(chunk.Sentences) == 0 {
+		// Skip empty results
+		logger.Info("Skipping summarization for empty tool result", zap.String("title", chunk.Title))
+		return nil
 	}
 
-	summarizeResult := func(chunk *ToolResultChunk) *ToolResultChunk {
-		if len(chunk.Sentences) == 0 {
-			// Skip empty results
-			return nil
-		}
+	// Join all sentences into a single text
+	combinedText := strings.Join(chunk.Sentences, " ")
 
-		// Join all sentences into a single text
-		combinedText := strings.Join(chunk.Sentences, " ")
-
-		// Create summarization prompt using templates
-		promptData := prompts.SummarizationPromptData{
-			Query:   userQuery,
-			Content: combinedText,
-		}
-
-		systemPrompt, userPrompt, err := prompts.RenderSummarizationPrompt(promptData)
-		if err != nil {
-			// If template rendering fails, keep the original result
-			fmt.Printf("Failed to render summarization prompt: %v\n", err)
-			return chunk
-		}
-
-		messages := []llm.Message{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: userPrompt},
-		}
-
-		var responseContent strings.Builder
-		err = a.config.MiniModel.Client.GenerateInference(
-			ctx,
-			messages,
-			func(chunk string) error {
-				responseContent.WriteString(chunk)
-				return nil
-			},
-			llm.WithLLMModel(a.config.MiniModel.Model),
-			llm.WithTemperature(0.3),
-			llm.WithMaxTokens(200),
-		)
-
-		if err != nil {
-			// If summarization fails, keep the original result
-			fmt.Printf("Failed to summarize tool result: %v\n", err)
-			return chunk
-		}
-
-		summary := strings.TrimSpace(responseContent.String())
-
-		// Drop irrelevant content
-		if strings.ToUpper(summary) == "IRRELEVANT" {
-			return nil
-		}
-
-		// Create new summarized result
-		summarizedResult := &ToolResultChunk{
-			Sentences:   []string{summary},
-			Attribution: chunk.Attribution, // Preserve attributions
-			Title:       chunk.Title,
-			Metadata:    make(map[string]interface{}),
-		}
-
-		// Copy metadata and add summarization info
-		maps.Copy(summarizedResult.Metadata, chunk.Metadata)
-		summarizedResult.Metadata["summarized"] = true
-		summarizedResult.Metadata["original_sentence_count"] = len(chunk.Sentences)
-
-		return summarizedResult
+	// Create summarization prompt using templates
+	promptData := prompts.SummarizationPromptData{
+		Query:   userQuery,
+		Content: combinedText,
 	}
 
-	summarizedResults, err := linq.Pipe3(
-		linq.FromSlice(ctx, resultChunks),
-		linq.SelectPar(func(chunk *ToolResultChunk) *ToolResultChunk {
-			return summarizeResult(chunk)
-		}),
-		linq.Where(func(chunk *ToolResultChunk) bool {
-			return chunk != nil // Filter out nil results
-		}),
-		linq.ToSlice[*ToolResultChunk](),
+	systemPrompt, userPrompt, err := prompts.RenderSummarizationPrompt(promptData)
+	if err != nil {
+		// If template rendering fails, keep the original result
+		logger.Error("Failed to render summarization prompt", zap.String("title", chunk.Title), zap.Error(err))
+		return chunk
+	}
+
+	messages := []llm.Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userPrompt},
+	}
+
+	var responseContent strings.Builder
+	err = a.config.MiniModel.Client.GenerateInference(
+		ctx,
+		messages,
+		func(chunk string) error {
+			responseContent.WriteString(chunk)
+			return nil
+		},
+		llm.WithLLMModel(a.config.MiniModel.Model),
+		llm.WithTemperature(0.3),
+		llm.WithMaxTokens(200),
 	)
 
-	return summarizedResults, err
+	if err != nil {
+		// If summarization fails, keep the original result
+		logger.Error("Failed to summarize tool result", zap.String("title", chunk.Title), zap.Error(err))
+		return chunk
+	}
+
+	summary := strings.TrimSpace(responseContent.String())
+
+	// Drop irrelevant content
+	if strings.ToUpper(summary) == "IRRELEVANT" {
+		logger.Info("Dropping irrelevant tool result", zap.String("title", chunk.Title))
+		return nil
+	}
+
+	// Create new summarized result
+	summarizedResult := &schema.ToolExecutionResultChunk{
+		Sentences:   []string{summary},
+		Attribution: chunk.Attribution, // Preserve attributions
+		Title:       chunk.Title,
+		Metadata:    make(map[string]string),
+	}
+
+	// Copy metadata and add summarization info
+	maps.Copy(summarizedResult.Metadata, chunk.Metadata)
+	summarizedResult.Metadata["summarized"] = "true"
+	summarizedResult.Metadata["original_sentence_count"] = string(len(chunk.Sentences))
+
+	return summarizedResult
 }

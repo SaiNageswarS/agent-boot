@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"agent-boot/proto/schema"
 	"context"
 	"fmt"
 	"strconv"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/core/llm"
 	"github.com/SaiNageswarS/agent-boot/core/prompts"
+	"github.com/SaiNageswarS/go-api-boot/logger"
+	"go.uber.org/zap"
 )
 
 // ToolSelectionRequest represents a request for tool selection
@@ -18,30 +21,11 @@ type ToolSelectionRequest struct {
 	Preferences map[string]string `json:"preferences,omitempty"`
 }
 
-// ToolSelection represents a selected tool with parameters
-type ToolSelection struct {
-	Tool       MCPTool                `json:"tool"`
-	Parameters map[string]interface{} `json:"parameters"`
-	Confidence float64                `json:"confidence"`
-	Reasoning  string                 `json:"reasoning"`
-}
-
 // SelectTools uses the mini model to intelligently select appropriate tools for a given query
-func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]ToolSelection, error) {
+func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]*schema.SelectedTool, error) {
 	if len(a.config.Tools) == 0 {
-		return []ToolSelection{}, nil
+		return []*schema.SelectedTool{}, nil
 	}
-
-	a.reportProgress(NewToolSelectionEvent(
-		"selection_starting",
-		"Starting tool selection",
-		&ToolSelectionProgress{
-			Query:      req.Query,
-			ToolsCount: len(a.config.Tools),
-			MaxTools:   3,
-			Status:     "starting",
-		},
-	))
 
 	// Create tool descriptions for the prompt
 	toolDescriptions := make([]string, 0, len(a.config.Tools))
@@ -82,45 +66,34 @@ func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]To
 	)
 
 	if err != nil {
-		a.reportProgress(NewErrorEvent(
-			"tool_selection",
-			"Tool selection failed",
-			err.Error(),
-		))
-
 		return nil, fmt.Errorf("failed to select tools: %w", err)
 	}
 
 	// Parse the response to extract tool selections
 	selections, err := a.parseToolSelections(responseContent.String())
 	if err != nil {
+		logger.Error("Failed to parse tool selections", zap.Error(err), zap.String("response", responseContent.String()))
 		// Fallback: return the first tool as a basic selection
 		if len(a.config.Tools) > 0 {
-			return []ToolSelection{
+			return []*schema.SelectedTool{
 				{
-					Tool:       a.config.Tools[0],
-					Parameters: make(map[string]interface{}),
-					Confidence: 0.5,
-					Reasoning:  "Fallback selection due to parsing error",
+					Name:       a.config.Tools[0].Name,
+					Parameters: make(map[string]string),
+					Query:      req.Query,
 				},
 			}, nil
 		}
 	}
 
-	a.reportProgress(NewToolSelectionEvent(
-		"selection_completed",
-		fmt.Sprintf("Selected %d tools", len(selections)),
-		&ToolSelectionProgress{
-			Query:      req.Query,
-			ToolsCount: len(a.config.Tools),
-			MaxTools:   3,
-			Status:     "completed",
-		},
-	))
+	for _, selection := range selections {
+		// Set the query for each selected tool
+		selection.Query = req.Query
+	}
+
 	return selections, nil
 }
 
-func (a *Agent) parseToolSelections(response string) ([]ToolSelection, error) {
+func (a *Agent) parseToolSelections(response string) ([]*schema.SelectedTool, error) {
 	// Look for TOOL_SELECTION_START and TOOL_SELECTION_END markers
 	startMarker := "TOOL_SELECTION_START"
 	endMarker := "TOOL_SELECTION_END"
@@ -137,7 +110,7 @@ func (a *Agent) parseToolSelections(response string) ([]ToolSelection, error) {
 
 	// Split into tool blocks
 	toolBlocks := strings.Split(content, "TOOL:")
-	selections := make([]ToolSelection, 0, len(toolBlocks))
+	selections := make([]*schema.SelectedTool, 0, len(toolBlocks))
 
 	for _, block := range toolBlocks {
 		block = strings.TrimSpace(block)
@@ -157,13 +130,13 @@ func (a *Agent) parseToolSelections(response string) ([]ToolSelection, error) {
 }
 
 // parseToolBlock parses an individual tool block
-func (a *Agent) parseToolBlock(block string) (ToolSelection, error) {
+func (a *Agent) parseToolBlock(block string) (*schema.SelectedTool, error) {
 	lines := strings.Split(block, "\n")
 
 	var toolName string
 	var confidence float64 = 0.5
 	var reasoning string
-	parameters := make(map[string]interface{})
+	parameters := make(map[string]string)
 
 	inParameters := false
 
@@ -214,26 +187,13 @@ func (a *Agent) parseToolBlock(block string) (ToolSelection, error) {
 	}
 
 	// Find the tool by name
-	var foundTool *MCPTool
-	for _, tool := range a.config.Tools {
-		if tool.Name == toolName {
-			foundTool = &tool
-			break
-		}
-	}
+	logger.Info("Selected tool",
+		zap.String("tool_name", toolName),
+		zap.String("reason", reasoning),
+		zap.Float64("confidence", confidence))
 
-	if foundTool == nil {
-		return ToolSelection{}, fmt.Errorf("tool not found: %s", toolName)
-	}
-
-	if reasoning == "" {
-		reasoning = "Selected by AI"
-	}
-
-	return ToolSelection{
-		Tool:       *foundTool,
+	return &schema.SelectedTool{
+		Name:       toolName,
 		Parameters: parameters,
-		Confidence: confidence,
-		Reasoning:  reasoning,
 	}, nil
 }

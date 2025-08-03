@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"agent-boot/proto/schema"
 	"context"
 	"strings"
 	"testing"
@@ -81,8 +82,12 @@ func TestAddTool(t *testing.T) {
 	tool := MCPTool{
 		Name:        "test-tool",
 		Description: "A test tool",
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
-			return []*ToolResultChunk{NewToolResult("Test", []string{"result"})}, nil
+		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
+			result := make(chan *schema.ToolExecutionResultChunk, 1)
+			defer close(result)
+
+			result <- NewToolResult("Test", []string{"result"})
+			return result
 		},
 	}
 
@@ -95,27 +100,6 @@ func TestAddTool(t *testing.T) {
 
 	if tools[0].Name != "test-tool" {
 		t.Errorf("Expected tool name 'test-tool', got '%s'", tools[0].Name)
-	}
-}
-
-func TestAddPrompt(t *testing.T) {
-	agent := NewAgent(AgentConfig{})
-
-	template := PromptTemplate{
-		Name:      "test-template",
-		Template:  "Hello {{name}}",
-		Variables: []string{"name"},
-	}
-
-	agent.AddPrompt("test", template)
-
-	prompts := agent.GetAvailablePrompts()
-	if len(prompts) != 1 {
-		t.Fatalf("Expected 1 prompt, got %d", len(prompts))
-	}
-
-	if prompts["test"].Name != "test-template" {
-		t.Errorf("Expected prompt name 'test-template', got '%s'", prompts["test"].Name)
 	}
 }
 
@@ -140,13 +124,12 @@ func TestGenerateAnswer(t *testing.T) {
 		MaxTokens: 1000,
 	})
 
-	req := GenerateAnswerRequest{
-		Query:    "Test question",
+	req := &schema.GenerateAnswerRequest{
+		Question: "Test question",
 		Context:  "Test context",
-		UseTools: false,
 	}
 
-	response, err := agent.Execute(context.Background(), req)
+	response, err := agent.Execute(context.Background(), &NoOpProgressReporter{}, req)
 	if err != nil {
 		t.Fatalf("GenerateAnswer failed: %v", err)
 	}
@@ -192,19 +175,22 @@ func TestGenerateAnswerWithTools(t *testing.T) {
 			{
 				Name:        "calculator",
 				Description: "Performs calculations",
-				Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
-					return NewMathToolResult("2+2", "4", []string{"2 + 2 = 4"}), nil
+				Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
+					result := make(chan *schema.ToolExecutionResultChunk, 1)
+					defer close(result)
+
+					result <- NewMathToolResult("2+2", "4", []string{"Step 1: 2 + 2 = 4"})
+					return result
 				},
 			},
 		},
 	})
 
-	req := GenerateAnswerRequest{
-		Query:    "What is 2+2?",
-		UseTools: true,
+	req := &schema.GenerateAnswerRequest{
+		Question: "What is 2+2?",
 	}
 
-	response, err := agent.Execute(context.Background(), req)
+	response, err := agent.Execute(context.Background(), &NoOpProgressReporter{}, req)
 	if err != nil {
 		t.Fatalf("GenerateAnswer with tools failed: %v", err)
 	}
@@ -213,8 +199,8 @@ func TestGenerateAnswerWithTools(t *testing.T) {
 		t.Errorf("Expected 1 tool used, got %d", len(response.ToolsUsed))
 	}
 
-	if response.ToolsUsed[0].Tool.Name != "calculator" {
-		t.Errorf("Expected calculator tool, got '%s'", response.ToolsUsed[0].Tool.Name)
+	if response.ToolsUsed[0] != "calculator" {
+		t.Errorf("Expected calculator tool, got '%s'", response.ToolsUsed[0])
 	}
 
 	if response.Answer != answerResponse {
@@ -323,9 +309,9 @@ func TestMultiResultRAGIntegration(t *testing.T) {
 	ragTool := MCPTool{
 		Name:        "rag_search",
 		Description: "Search knowledge base and return multiple relevant documents",
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
+		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
 			// Simulate RAG returning multiple relevant documents
-			return []*ToolResultChunk{
+			testResponse := []*schema.ToolExecutionResultChunk{
 				{
 					Sentences:   []string{"Machine learning is a subset of artificial intelligence that enables computers to learn without being explicitly programmed."},
 					Attribution: "AI Fundamentals Textbook, Chapter 3",
@@ -341,7 +327,16 @@ func TestMultiResultRAGIntegration(t *testing.T) {
 					Attribution: "Machine Learning Handbook, Section 4.2",
 					Title:       "Supervised Learning Methods",
 				},
-			}, nil
+			}
+
+			result := make(chan *schema.ToolExecutionResultChunk, len(testResponse))
+			defer close(result)
+
+			for _, res := range testResponse {
+				result <- res
+			}
+
+			return result
 		},
 	}
 
@@ -349,13 +344,12 @@ func TestMultiResultRAGIntegration(t *testing.T) {
 
 	// Test RAG search execution
 	ctx := context.Background()
-	req := GenerateAnswerRequest{
-		Query:    "Please analyze machine learning concepts in detail", // Complex query to trigger big model
+	req := &schema.GenerateAnswerRequest{
+		Question: "Please analyze machine learning concepts in detail", // Complex query to trigger big model
 		Context:  "User is learning about AI concepts",
-		UseTools: true,
 	}
 
-	resp, err := agent.Execute(ctx, req)
+	resp, err := agent.Execute(ctx, &NoOpProgressReporter{}, req)
 	if err != nil {
 		t.Fatalf("RAG integration failed: %v", err)
 	}
@@ -374,8 +368,8 @@ func TestMultiResultRAGIntegration(t *testing.T) {
 		t.Errorf("Expected 1 tool used, got %d", len(resp.ToolsUsed))
 	}
 
-	if resp.ToolsUsed[0].Tool.Name != "rag_search" {
-		t.Errorf("Expected rag_search tool, got '%s'", resp.ToolsUsed[0].Tool.Name)
+	if resp.ToolsUsed[0] != "rag_search" {
+		t.Errorf("Expected rag_search tool, got '%s'", resp.ToolsUsed[0])
 	}
 
 	// Verify answer incorporates multiple sources
@@ -424,9 +418,9 @@ func TestMultiResultWebSearchIntegration(t *testing.T) {
 	webSearchTool := MCPTool{
 		Name:        "web_search",
 		Description: "Search the web and return multiple relevant results",
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
+		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
 			// Simulate web search returning multiple sources using the helper function
-			searchResults := []*ToolResultChunk{
+			searchResults := []*schema.ToolExecutionResultChunk{
 				{
 					Sentences:   []string{"Go is an open source programming language developed by Google. It's designed for building simple, reliable, and efficient software."},
 					Attribution: "https://golang.org/doc/",
@@ -441,20 +435,26 @@ func TestMultiResultWebSearchIntegration(t *testing.T) {
 				},
 			}
 
-			return searchResults, nil
+			result := make(chan *schema.ToolExecutionResultChunk, len(searchResults))
+			defer close(result)
+
+			for _, res := range searchResults {
+				result <- res
+			}
+
+			return result
 		},
 	}
 
 	agent.AddTool(webSearchTool)
 
 	ctx := context.Background()
-	req := GenerateAnswerRequest{
-		Query:    "Please provide a comprehensive analysis of the Go programming language", // Complex query
+	req := &schema.GenerateAnswerRequest{
+		Question: "Please provide a comprehensive analysis of the Go programming language", // Complex query
 		Context:  "User wants to learn about Go programming",
-		UseTools: true,
 	}
 
-	resp, err := agent.Execute(ctx, req)
+	resp, err := agent.Execute(ctx, &NoOpProgressReporter{}, req)
 	if err != nil {
 		t.Fatalf("Web search integration failed: %v", err)
 	}
@@ -473,8 +473,8 @@ func TestMultiResultWebSearchIntegration(t *testing.T) {
 		t.Errorf("Expected 1 tool used, got %d", len(resp.ToolsUsed))
 	}
 
-	if resp.ToolsUsed[0].Tool.Name != "web_search" {
-		t.Errorf("Expected web_search tool, got '%s'", resp.ToolsUsed[0].Tool.Name)
+	if resp.ToolsUsed[0] != "web_search" {
+		t.Errorf("Expected web_search tool, got '%s'", resp.ToolsUsed[0])
 	}
 
 	// Verify answer incorporates web search insights
@@ -528,9 +528,9 @@ func TestSummarizeContextFeature(t *testing.T) {
 		Name:             "summarized_search",
 		Description:      "Search with automatic summarization",
 		SummarizeContext: true,
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
+		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
 			// Simulate verbose search results that need summarization
-			return []*ToolResultChunk{
+			searchResults := []*schema.ToolExecutionResultChunk{
 				{
 					Sentences: []string{
 						"Machine learning is a branch of artificial intelligence.",
@@ -552,20 +552,28 @@ func TestSummarizeContextFeature(t *testing.T) {
 					Attribution: "Mixed Content Source",
 					Title:       "Mixed Content",
 				},
-			}, nil
+			}
+
+			result := make(chan *schema.ToolExecutionResultChunk, len(searchResults))
+			defer close(result)
+
+			for _, res := range searchResults {
+				result <- res
+			}
+
+			return result
 		},
 	}
 
 	agent.AddTool(summarizedSearchTool)
 
 	ctx := context.Background()
-	req := GenerateAnswerRequest{
-		Query:    "What is machine learning?",
+	req := &schema.GenerateAnswerRequest{
+		Question: "What is machine learning?",
 		Context:  "User wants to understand machine learning concepts",
-		UseTools: true,
 	}
 
-	resp, err := agent.Execute(ctx, req)
+	resp, err := agent.Execute(ctx, &NoOpProgressReporter{}, req)
 	if err != nil {
 		t.Fatalf("Summarization test failed: %v", err)
 	}
@@ -584,13 +592,8 @@ func TestSummarizeContextFeature(t *testing.T) {
 		t.Errorf("Expected 1 tool used, got %d", len(resp.ToolsUsed))
 	}
 
-	if resp.ToolsUsed[0].Tool.Name != "summarized_search" {
-		t.Errorf("Expected summarized_search tool, got '%s'", resp.ToolsUsed[0].Tool.Name)
-	}
-
-	// Verify the tool has SummarizeContext enabled
-	if !resp.ToolsUsed[0].Tool.SummarizeContext {
-		t.Error("Expected SummarizeContext to be true")
+	if resp.ToolsUsed[0] != "summarized_search" {
+		t.Errorf("Expected summarized_search tool, got '%s'", resp.ToolsUsed[0])
 	}
 
 	t.Logf("Summarization Test Answer: %s", resp.Answer)
@@ -632,9 +635,9 @@ func TestSummarizeContextRAGScenario(t *testing.T) {
 		Name:             "rag_search",
 		Description:      "Search knowledge base with smart summarization",
 		SummarizeContext: true,
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
+		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
 			// Simulate detailed RAG results with lots of text that needs summarization
-			return []*ToolResultChunk{
+			ragResults := []*schema.ToolExecutionResultChunk{
 				{
 					Sentences: []string{
 						"Machine learning is a method of data analysis that automates analytical model building.",
@@ -667,20 +670,28 @@ func TestSummarizeContextRAGScenario(t *testing.T) {
 					Attribution: "Random News Feed",
 					Title:       "Unrelated Content",
 				},
-			}, nil
+			}
+
+			result := make(chan *schema.ToolExecutionResultChunk, len(ragResults))
+			defer close(result)
+
+			for _, res := range ragResults {
+				result <- res
+			}
+
+			return result
 		},
 	}
 
 	agent.AddTool(ragTool)
 
 	ctx := context.Background()
-	req := GenerateAnswerRequest{
-		Query:    "Explain how machine learning works", // Complex query to trigger big model
+	req := &schema.GenerateAnswerRequest{
+		Question: "Explain how machine learning works", // Complex query to trigger big model
 		Context:  "User wants to understand ML concepts for a presentation",
-		UseTools: true,
 	}
 
-	resp, err := agent.Execute(ctx, req)
+	resp, err := agent.Execute(ctx, &NoOpProgressReporter{}, req)
 	if err != nil {
 		t.Fatalf("RAG summarization test failed: %v", err)
 	}
@@ -690,21 +701,11 @@ func TestSummarizeContextRAGScenario(t *testing.T) {
 		t.Errorf("Expected 1 tool used, got %d", len(resp.ToolsUsed))
 	}
 
-	tool := resp.ToolsUsed[0].Tool
-	if !tool.SummarizeContext {
-		t.Error("Expected SummarizeContext to be enabled")
-	}
-
-	if tool.Name != "rag_search" {
-		t.Errorf("Expected rag_search tool, got %s", tool.Name)
-	}
-
-	// Verify the query was passed to the tool for summarization context
-	if query, ok := resp.ToolsUsed[0].Parameters["query"].(string); !ok || query != req.Query {
-		t.Errorf("Expected query to be passed to tool for summarization context")
+	tool := resp.ToolsUsed[0]
+	if tool != "rag_search" {
+		t.Errorf("Expected rag_search tool, got %s", tool)
 	}
 
 	t.Logf("RAG Summarization Test Answer: %s", resp.Answer)
-	t.Logf("Tools Used: %+v", resp.ToolsUsed[0].Tool.Name)
-	t.Logf("SummarizeContext Enabled: %v", resp.ToolsUsed[0].Tool.SummarizeContext)
+	t.Logf("Tools Used: %+v", resp.ToolsUsed[0])
 }

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"agent-boot/proto/schema"
 	"context"
 	"testing"
 )
@@ -10,32 +11,40 @@ func TestExecuteTool(t *testing.T) {
 	tool := MCPTool{
 		Name:        "test-tool",
 		Description: "Test tool",
-		Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
+		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
 			handlerCalled = true
-			return []*ToolResultChunk{NewToolResult("Test Result", []string{"Success"})}, nil
+			result := make(chan *schema.ToolExecutionResultChunk, 1)
+			defer close(result)
+			result <- NewToolResult("Test Result", []string{"Success"})
+
+			return result
 		},
+		SummarizeContext: false,
 	}
 
-	agent := NewAgent(AgentConfig{})
-	selection := ToolSelection{
-		Tool:       tool,
-		Parameters: map[string]interface{}{"test": "value"},
+	agent := NewAgent(AgentConfig{Tools: []MCPTool{tool}})
+	selection := &schema.SelectedTool{
+		Name:       "test-tool",
+		Parameters: map[string]string{"test": "value"},
+		Query:      "What is the test?",
 	}
 
-	results, err := agent.ExecuteTool(context.Background(), selection)
-	if err != nil {
-		t.Fatalf("executeTool failed: %v", err)
+	resultsChan := agent.ExecuteTool(context.Background(), selection)
+	var result *schema.ToolExecutionResultChunk
+	for res := range resultsChan {
+		result = res
 	}
 
 	if !handlerCalled {
-		t.Error("Tool handler should have been called")
+		t.Error("Tool handler was not called")
 	}
 
-	if len(results) != 1 {
-		t.Fatalf("Expected 1 result, got %d", len(results))
+	if result == nil {
+		t.Error("Expected a result from the tool execution, got nil")
+		return
 	}
 
-	if results[0].Title != "Test Result" {
-		t.Errorf("Expected title 'Test Result', got '%s'", results[0].Title)
+	if result.Title != "Test Result" {
+		t.Errorf("Expected result title 'Test Result', got '%s'", result.Title)
 	}
 }

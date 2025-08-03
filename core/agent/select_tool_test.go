@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"agent-boot/proto/schema"
 	"context"
 	"testing"
 
@@ -58,8 +59,12 @@ TOOL_SELECTION_END
 			{
 				Name:        "calculator",
 				Description: "Performs calculations",
-				Handler: func(ctx context.Context, params map[string]interface{}) ([]*ToolResultChunk, error) {
-					return NewMathToolResult("2+2", "4", nil), nil
+				Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
+					result := NewMathToolResult("2+2", "4", []string{"Step 1: 2 + 2 = 4"})
+					ch := make(chan *schema.ToolExecutionResultChunk, 1)
+					ch <- result
+					close(ch)
+					return ch
 				},
 			},
 		},
@@ -80,11 +85,7 @@ TOOL_SELECTION_END
 		t.Fatalf("Expected 1 selection, got %d", len(selections))
 	}
 
-	if selections[0].Tool.Name != "calculator" {
-		t.Errorf("Expected tool 'calculator', got '%s'", selections[0].Tool.Name)
-	}
-
-	if selections[0].Confidence != 0.9 {
-		t.Errorf("Expected confidence 0.9, got %f", selections[0].Confidence)
+	if selections[0].Name != "calculator" {
+		t.Errorf("Expected tool 'calculator', got '%s'", selections[0].Name)
 	}
 }

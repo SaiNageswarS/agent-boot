@@ -4,6 +4,7 @@ import (
 	"agent-boot/proto/schema"
 	"context"
 	"maps"
+	"strconv"
 	"strings"
 
 	"github.com/SaiNageswarS/agent-boot/core/llm"
@@ -114,7 +115,7 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolExecution
 	// Copy metadata and add summarization info
 	maps.Copy(summarizedResult.Metadata, chunk.Metadata)
 	summarizedResult.Metadata["summarized"] = "true"
-	summarizedResult.Metadata["original_sentence_count"] = string(len(chunk.Sentences))
+	summarizedResult.Metadata["original_sentence_count"] = strconv.Itoa(len(chunk.Sentences))
 
 	return summarizedResult
 }

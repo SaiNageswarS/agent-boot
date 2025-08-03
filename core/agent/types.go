@@ -4,6 +4,7 @@ import (
 	"agent-boot/proto/schema"
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -50,7 +51,7 @@ func NewDateTimeToolResult(operation string, result string, timezone string) *sc
 	toolResult := NewToolResult("Date/Time Operation", sentences)
 	toolResult.Metadata["operation"] = operation
 	toolResult.Metadata["timezone"] = timezone
-	toolResult.Metadata["timestamp"] = string(time.Now().Unix())
+	toolResult.Metadata["timestamp"] = strconv.FormatInt(time.Now().Unix(), 10)
 
 	return toolResult
 }

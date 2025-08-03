@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -104,7 +105,7 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 				// Process each result from the tool
 				for toolResult := range toolResultChan {
 					if toolResult.Error != "" {
-						logger.Error("Tool execution error", zap.String("tool", selection.Name), zap.Error(fmt.Errorf(toolResult.Error)))
+						logger.Error("Tool execution error", zap.String("tool", selection.Name), zap.Error(errors.New(toolResult.Error)))
 						reporter.Send(NewStreamError(toolResult.Error, fmt.Sprintf("Error executing tool %s", selection.Name)))
 						continue
 					}
@@ -159,7 +160,7 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 	response.ProcessingTime = getCurrentTimeMs() - startTime
 
 	// Add metadata
-	response.Metadata["tool_count"] = string(len(response.ToolsUsed))
+	response.Metadata["tool_count"] = strconv.Itoa(len(response.ToolsUsed))
 	response.Metadata["has_context"] = strconv.FormatBool(req.Context != "")
 	response.Metadata["used_big_model"] = strconv.FormatBool(useBigModel)
 

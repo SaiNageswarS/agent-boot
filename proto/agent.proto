@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "agent-boot/proto/schema";
+option go_package = "github.com/SaiNageswarS/agent-boot/schema";
 
 package agent;
 

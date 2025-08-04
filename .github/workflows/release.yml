@@ -32,87 +32,9 @@ jobs:
           echo "${HOME}/go/bin" >> $GITHUB_PATH
           echo "Path is ${GITHUB_PATH}"
 
-      - name: Build all components
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run tests
         run: |
-          cd proto        && ./build.sh
-          cd ../example && ./build.sh
-
-      - name: Move all binaries to ./release-bin
-        run: |
-          mkdir -p release-bin
-          mv example/build/* release-bin/
-          ls -lh release-bin
-
-      - name: Upload Go artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-binaries
-          path: release-bin/*
-
-  build-pySideCar:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout API
-        uses: actions/checkout@v4
-
-      - name: Install Python dependencies
-        run: pip install -r pySideCar/requirements.txt
-
-      - name: Install pylint
-        run: pip install pylint
-
-      - name: Run pylint on pySideCar
-        run: pylint pySideCar --extension-pkg-allow-list=orjson --disable=missing-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,too-many-instance-attributes,logging-fstring-interpolation,trailing-whitespace
-
-      - name: Package Python Temporal worker (pySideCar)
-        run: |
-          mkdir -p release-bin
-          zip -r release-bin/pySideCar.zip pySideCar -x '*.pyc' '__pycache__/*'
-          ls -lh release-bin
-
-      - name: Upload Python artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-binaries
-          path: release-bin/pySideCar.zip
-
-  release:
-    needs:  [build-go-binaries, build-pySideCar]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')   # only for tag pushes
-    permissions:
-      contents: write                          # allow creating a release
-
-    steps:
-    - name: Download Go artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: go-binaries
-        path: ./artifacts
-
-    - name: Download Python artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: python-binaries
-        path: ./artifacts
-
-    - name: List downloaded artifacts
-      run: |
-        echo "Downloaded contents:"
-        find ./artifacts -type f -exec ls -lh {} \;
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        files: ./artifacts/*
-        body: |
-          ## Downloads
-          
-          ### Go Executables
-          - `medicine-rag` - Example Medicine RAG Executable
-          - `mcp-agent` - Linux mcp Executable
-          - `mcp-agent.exe` - Windows mcp Executable
-          - pySideCar.zip - Python Temporal Worker
+          go test -v ./... -covermode=count -coverprofile=coverage.out

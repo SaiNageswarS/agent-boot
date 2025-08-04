@@ -163,6 +163,7 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 	response.Metadata["tool_count"] = strconv.Itoa(len(response.ToolsUsed))
 	response.Metadata["has_context"] = strconv.FormatBool(req.Context != "")
 	response.Metadata["used_big_model"] = strconv.FormatBool(useBigModel)
+	response.IsFinal = true
 
 	reporter.Send(NewProgressUpdate(
 		schema.Stage_answer_generation_completed,
@@ -170,7 +171,7 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 		3,
 	))
 
-	reporter.Send(NewAnswerChunk(response.Answer, response.ToolsUsed, response.TokenUsed, response.PromptUsed, response.ModelUsed, response.Metadata, true))
+	reporter.Send(NewAnswerChunk(response))
 	reporter.Send(NewStreamComplete("Answer generation completed"))
 	return response, nil
 }

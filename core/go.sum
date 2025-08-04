@@ -1,5 +1,7 @@
 github.com/SaiNageswarS/go-api-boot v1.0.32 h1:upzheWWY8rQMwxoZht2oXzi8Te4UlawkDGeyhmlO3Bs=
 github.com/SaiNageswarS/go-api-boot v1.0.32/go.mod h1:ZeEfikqpTE35VA/N5ijXwuOsBni7gZVlXfXFX7b6n78=
+github.com/SaiNageswarS/go-collection-boot v1.0.5 h1:O89P/mKQjezJfLjaMCM87XH5GkURod6NUk0BGfHPbFk=
+github.com/SaiNageswarS/go-collection-boot v1.0.5/go.mod h1:phb2o/A1AF6rKem15hEX5Y32ymiAmF2FGFatejbbjSw=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=

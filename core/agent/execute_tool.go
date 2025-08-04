@@ -10,6 +10,7 @@ import (
 	"github.com/SaiNageswarS/agent-boot/core/llm"
 	"github.com/SaiNageswarS/agent-boot/core/prompts"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-collection-boot/linq"
 	"go.uber.org/zap"
 )
 
@@ -22,15 +23,38 @@ func (a *Agent) ExecuteTool(ctx context.Context, selection *schema.SelectedTool)
 	// Execute the tool handler
 	toolResultChan := tool.Handler(ctx, selection.Parameters)
 
-	for toolResult := range toolResultChan {
-		// Summarize the result if the tool has summarization enabled
-		if tool.SummarizeContext {
-			summarizedResult := a.summarizeResult(ctx, toolResult, selection.Query)
-			if summarizedResult != nil {
-				out <- summarizedResult
+	// Parallel stream processing of tool results
+	linqCtx, cancel := context.WithCancel(ctx)
+	_, err := linq.Pipe3(
+		linq.NewStream(linqCtx, toolResultChan, cancel, 10),
+
+		linq.SelectPar(func(raw *schema.ToolExecutionResultChunk) *schema.ToolExecutionResultChunk {
+			if tool.SummarizeContext {
+				return a.summarizeResult(linqCtx, raw, selection.Query)
 			}
-		} else {
-			out <- toolResult
+
+			// If summarization is not enabled, return the raw result
+			return raw
+		}),
+
+		linq.Where(func(chunk *schema.ToolExecutionResultChunk) bool {
+			// Filter out nil results and those marked as irrelevant
+			if chunk == nil {
+				return false
+			}
+
+			return true
+		}),
+
+		linq.ForEach(func(chunk *schema.ToolExecutionResultChunk) {
+			out <- chunk
+		}),
+	)
+
+	if err != nil {
+		logger.Error("Error executing tool", zap.String("tool", selection.Name), zap.Error(err))
+		out <- &schema.ToolExecutionResultChunk{
+			Error: err.Error(),
 		}
 	}
 
@@ -50,6 +74,15 @@ func (a *Agent) ExecuteTool(ctx context.Context, selection *schema.SelectedTool)
 // - Web search results with mixed relevant/irrelevant content
 // - Large document chunks that need to be condensed for context windows
 func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolExecutionResultChunk, userQuery string) *schema.ToolExecutionResultChunk {
+	if chunk == nil {
+		logger.Error("Received nil tool result chunk for summarization")
+		return nil
+	}
+
+	if chunk.Error != "" {
+		return chunk // Return as is if there's an error
+	}
+
 	if len(chunk.Sentences) == 0 {
 		// Skip empty results
 		logger.Info("Skipping summarization for empty tool result", zap.String("title", chunk.Title))

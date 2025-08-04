@@ -67,19 +67,10 @@ func NewToolExecutionResult(toolName string, result *schema.ToolExecutionResultC
 }
 
 // NewAnswerChunk creates an AnswerChunk
-func NewAnswerChunk(answer string, toolsUsed []string, tokens int32, prompt, model string, meta map[string]string, isFinal bool) *schema.AgentStreamChunk {
+func NewAnswerChunk(answerChunk *schema.AnswerChunk) *schema.AgentStreamChunk {
 	return &schema.AgentStreamChunk{
 		ChunkType: &schema.AgentStreamChunk_Answer{
-			Answer: &schema.AnswerChunk{
-				Answer:         answer,
-				ToolsUsed:      toolsUsed,
-				TokenUsed:      tokens,
-				PromptUsed:     prompt,
-				ModelUsed:      model,
-				Metadata:       meta,
-				IsFinal:        isFinal,
-				ProcessingTime: time.Now().UnixMilli(),
-			},
+			Answer: answerChunk,
 		},
 	}
 }

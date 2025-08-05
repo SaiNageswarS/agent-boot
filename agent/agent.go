@@ -249,11 +249,6 @@ func (a *Agent) shouldUseBigModel(query string, toolResults []string) bool {
 	return false
 }
 
-// AddTool adds a new MCP tool to the agent
-func (a *Agent) AddTool(tool MCPTool) {
-	a.config.Tools = append(a.config.Tools, tool)
-}
-
 // GetAvailableTools returns a list of all available tools
 func (a *Agent) GetAvailableTools() []MCPTool {
 	return a.config.Tools

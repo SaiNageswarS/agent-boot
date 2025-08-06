@@ -10,7 +10,7 @@ import (
 
 func TestProvideOllamaClient_MissingAPIKey(t *testing.T) {
 	withEnv("OLLAMA_HOST", "", func(logger *MockLogger) {
-		ProvideOllamaClient()
+		NewOllamaClient("deepseek-r1:14b")
 
 		assert.True(t, logger.isFatalCalled)
 		assert.Equal(t, "OLLAMA_HOST environment variable is not set", logger.fatalMsg)
@@ -19,7 +19,7 @@ func TestProvideOllamaClient_MissingAPIKey(t *testing.T) {
 
 func TestProvideOllamaClient_Success(t *testing.T) {
 	withEnv("OLLAMA_HOST", "http://localhost:11434", func(logger *MockLogger) {
-		client := ProvideOllamaClient()
+		client := NewOllamaClient("deepseek-r1:14b")
 		assert.NotNil(t, client)
 	})
 }
@@ -47,6 +47,7 @@ func TestOllamaLLMClient_Settings(t *testing.T) {
 		cli: &mockChatAPI{
 			mockResponse: "Settings applied",
 		},
+		model: "llama3.2",
 	}
 
 	inputMessages := []Message{
@@ -56,7 +57,7 @@ func TestOllamaLLMClient_Settings(t *testing.T) {
 	err := client.GenerateInference(t.Context(), inputMessages, func(chunk string) error {
 		assert.Equal(t, "Settings applied", chunk)
 		return nil
-	}, WithLLMModel("llama3.2"), WithTemperature(0.7), WithSystemPrompt("You are test agent"))
+	}, WithTemperature(0.7), WithSystemPrompt("You are test agent"))
 
 	assert.NoError(t, err)
 	assert.Equal(t, "llama3.2", client.cli.(*mockChatAPI).reqReceived.Model)

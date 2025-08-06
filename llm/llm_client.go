@@ -4,6 +4,12 @@ import (
 	"context"
 )
 
+type Capability uint8
+
+const (
+	NativeToolCalling Capability = 1 << iota
+)
+
 type LLMClient interface {
 	GenerateInference(
 		ctx context.Context,
@@ -11,6 +17,10 @@ type LLMClient interface {
 		callback func(chunk string) error,
 		opts ...LLMOption,
 	) error
+
+	Capabilities() Capability
+
+	GetModel() string
 }
 
 type LLMSettings struct {
@@ -24,10 +34,6 @@ type LLMSettings struct {
 type LLMOption func(*LLMSettings)
 
 // Common options for all LLM providers
-func WithLLMModel(name string) LLMOption {
-	return func(s *LLMSettings) { s.model = name }
-}
-
 func WithTemperature(temp float64) LLMOption {
 	return func(s *LLMSettings) { s.temperature = temp }
 }

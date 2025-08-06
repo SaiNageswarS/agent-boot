@@ -7,7 +7,7 @@ import (
 	"github.com/SaiNageswarS/agent-boot/llm"
 )
 
-func (a *Agent) GenerateAnswer(ctx context.Context, client llm.LLMClient, modelName, prompt string) (string, error) {
+func (a *Agent) GenerateAnswer(ctx context.Context, client llm.LLMClient, prompt string) (string, error) {
 	messages := []llm.Message{
 		{Role: "user", Content: prompt},
 	}
@@ -20,7 +20,6 @@ func (a *Agent) GenerateAnswer(ctx context.Context, client llm.LLMClient, modelN
 			responseContent.WriteString(chunk)
 			return nil
 		},
-		llm.WithLLMModel(modelName),
 		llm.WithTemperature(0.7),
 		llm.WithMaxTokens(a.getMaxTokens()),
 	)

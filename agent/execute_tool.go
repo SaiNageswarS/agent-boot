@@ -111,14 +111,13 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolExecution
 	}
 
 	var responseContent strings.Builder
-	err = a.config.MiniModel.Client.GenerateInference(
+	err = a.config.MiniModel.GenerateInference(
 		ctx,
 		messages,
 		func(chunk string) error {
 			responseContent.WriteString(chunk)
 			return nil
 		},
-		llm.WithLLMModel(a.config.MiniModel.Model),
 		llm.WithTemperature(0.3),
 		llm.WithMaxTokens(200),
 	)

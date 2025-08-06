@@ -11,7 +11,7 @@ import (
 
 func TestProvideAnthropicClient_MissingAPIKey(t *testing.T) {
 	withEnv("ANTHROPIC_API_KEY", "", func(logger *MockLogger) {
-		ProvideAnthropicClient()
+		NewAnthropicClient("claude-2")
 
 		assert.True(t, logger.isFatalCalled)
 		assert.Equal(t, "ANTHROPIC_API_KEY environment variable is not set", logger.fatalMsg)
@@ -20,7 +20,7 @@ func TestProvideAnthropicClient_MissingAPIKey(t *testing.T) {
 
 func TestProvideAnthropicClient_Success(t *testing.T) {
 	withEnv("ANTHROPIC_API_KEY", "test-key", func(logger *MockLogger) {
-		client := ProvideAnthropicClient().(*AnthropicClient)
+		client := NewAnthropicClient("claude-2").(*AnthropicClient)
 
 		assert.NotNil(t, client)
 		assert.Equal(t, "test-key", client.apiKey)

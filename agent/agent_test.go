@@ -10,32 +10,23 @@ import (
 	"github.com/SaiNageswarS/agent-boot/schema"
 )
 
-// Mock LLM client for testing
+// mock llm client for testing different LLM calls
 type mockLLMClient struct {
-	response string
-	err      error
-}
-
-func (m *mockLLMClient) GenerateInference(
-	ctx context.Context,
-	messages []llm.Message,
-	callback func(string) error,
-	options ...llm.LLMOption,
-) error {
-	if m.err != nil {
-		return m.err
-	}
-	return callback(m.response)
-}
-
-// Multi-response mock client for testing different LLM calls
-type multiResponseMockClient struct {
 	responses []string
 	callCount int
 	err       error
+	model     string
 }
 
-func (m *multiResponseMockClient) GenerateInference(
+func (m *mockLLMClient) Capabilities() llm.Capability {
+	return 0
+}
+
+func (m *mockLLMClient) GetModel() string {
+	return m.model
+}
+
+func (m *mockLLMClient) GenerateInference(
 	ctx context.Context,
 	messages []llm.Message,
 	callback func(string) error,
@@ -85,11 +76,9 @@ func TestAddTool(t *testing.T) {
 		},
 	}
 
-	agentConfig := NewAgentConfigBuilder().
+	agent := NewAgentBuilder().
 		AddTool(tool).
 		Build()
-
-	agent := NewAgent(agentConfig)
 
 	tools := agent.GetAvailableTools()
 	if len(tools) != 1 {
@@ -104,13 +93,11 @@ func TestAddTool(t *testing.T) {
 func TestGenerateAnswer(t *testing.T) {
 	mockResponse := "This is a test answer"
 
-	agentConfig := NewAgentConfigBuilder().
-		WithMiniModel(&mockLLMClient{response: mockResponse}, "mini-model").
-		WithBigModel(&mockLLMClient{response: mockResponse}, "big-model").
+	agent := NewAgentBuilder().
+		WithMiniModel(&mockLLMClient{responses: []string{mockResponse}, model: "mini-model"}).
+		WithBigModel(&mockLLMClient{responses: []string{mockResponse}, model: "big-model"}).
 		WithMaxTokens(1000).
 		Build()
-
-	agent := NewAgent(agentConfig)
 
 	req := &schema.GenerateAnswerRequest{
 		Question: "Test question",
@@ -140,39 +127,27 @@ func TestGenerateAnswerWithTools(t *testing.T) {
 	answerResponse := "The answer is 4"
 
 	// Use the same client but modify the response after the first call
-	mockClient := &multiResponseMockClient{
+	mockClient := &mockLLMClient{
 		responses: []string{toolResponse, answerResponse},
 	}
 
-	agent := NewAgent(AgentConfig{
-		MiniModel: struct {
-			Client llm.LLMClient
-			Model  string
-		}{
-			Client: mockClient,
-			Model:  "mini-model",
-		},
-		BigModel: struct {
-			Client llm.LLMClient
-			Model  string
-		}{
-			Client: mockClient,
-			Model:  "big-model",
-		},
-		Tools: []MCPTool{
-			{
-				Name:        "calculator",
-				Description: "Performs calculations",
-				Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
-					result := make(chan *schema.ToolExecutionResultChunk, 1)
-					defer close(result)
+	calcTool := MCPTool{
+		Name:        "calculator",
+		Description: "Performs calculations",
+		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
+			result := make(chan *schema.ToolExecutionResultChunk, 1)
+			defer close(result)
 
-					result <- NewMathToolResult("2+2", "4", []string{"Step 1: 2 + 2 = 4"})
-					return result
-				},
-			},
+			result <- NewMathToolResult("2+2", "4", []string{"Step 1: 2 + 2 = 4"})
+			return result
 		},
-	})
+	}
+
+	agent := NewAgentBuilder().
+		WithMiniModel(mockClient).
+		WithBigModel(mockClient).
+		AddTool(calcTool).
+		Build()
 
 	req := &schema.GenerateAnswerRequest{
 		Question: "What is 2+2?",

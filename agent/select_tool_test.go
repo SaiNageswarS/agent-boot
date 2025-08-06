@@ -4,20 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/SaiNageswarS/agent-boot/llm"
 	"github.com/SaiNageswarS/agent-boot/schema"
 )
 
 func TestSelectToolsWithNoTools(t *testing.T) {
-	agent := NewAgent(AgentConfig{
-		MiniModel: struct {
-			Client llm.LLMClient
-			Model  string
-		}{
-			Client: &mockLLMClient{response: "No tools available"},
-			Model:  "test-model",
-		},
-	})
+	agent := NewAgentBuilder().
+		WithMiniModel(&mockLLMClient{responses: []string{"No tools available"}, model: "test-model"}).
+		Build()
 
 	req := ToolSelectionRequest{
 		Query:    "test query",
@@ -47,28 +40,22 @@ expression: 2+2
 TOOL_SELECTION_END
 `
 
-	agent := NewAgent(AgentConfig{
-		MiniModel: struct {
-			Client llm.LLMClient
-			Model  string
-		}{
-			Client: &mockLLMClient{response: mockResponse},
-			Model:  "test-model",
+	calcTool := MCPTool{
+		Name:        "calculator",
+		Description: "Performs calculations",
+		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
+			result := NewMathToolResult("2+2", "4", []string{"Step 1: 2 + 2 = 4"})
+			ch := make(chan *schema.ToolExecutionResultChunk, 1)
+			ch <- result
+			close(ch)
+			return ch
 		},
-		Tools: []MCPTool{
-			{
-				Name:        "calculator",
-				Description: "Performs calculations",
-				Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
-					result := NewMathToolResult("2+2", "4", []string{"Step 1: 2 + 2 = 4"})
-					ch := make(chan *schema.ToolExecutionResultChunk, 1)
-					ch <- result
-					close(ch)
-					return ch
-				},
-			},
-		},
-	})
+	}
+
+	agent := NewAgentBuilder().
+		WithMiniModel(&mockLLMClient{responses: []string{mockResponse}, model: "test-model"}).
+		AddTool(calcTool).
+		Build()
 
 	req := ToolSelectionRequest{
 		Query:    "What is 2+2?",

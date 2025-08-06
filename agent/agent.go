@@ -24,14 +24,8 @@ type PromptTemplate struct {
 
 // AgentConfig holds configuration for the agent
 type AgentConfig struct {
-	MiniModel struct {
-		Client llm.LLMClient
-		Model  string
-	}
-	BigModel struct {
-		Client llm.LLMClient
-		Model  string
-	}
+	MiniModel llm.LLMClient
+	BigModel  llm.LLMClient
 	Tools     []MCPTool
 	Prompt    PromptTemplate
 	MaxTokens int
@@ -39,7 +33,6 @@ type AgentConfig struct {
 
 // Agent represents the main agent system
 type Agent struct {
-	schema.UnimplementedAgentServer
 	config AgentConfig
 }
 
@@ -135,20 +128,17 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 	// Step 3: Decide which model to use based on complexity
 	useBigModel := a.shouldUseBigModel(req.Question, toolResults)
 	var client llm.LLMClient
-	var modelName string
 
 	if useBigModel {
-		client = a.config.BigModel.Client
-		modelName = a.config.BigModel.Model
+		client = a.config.BigModel
 	} else {
-		client = a.config.MiniModel.Client
-		modelName = a.config.MiniModel.Model
+		client = a.config.MiniModel
 	}
 
-	response.ModelUsed = modelName
+	response.ModelUsed = client.GetModel()
 
 	// Step 4: Generate the final answer
-	finalAnswer, err := a.GenerateAnswer(ctx, client, modelName, prompt)
+	finalAnswer, err := a.GenerateAnswer(ctx, client, prompt)
 	if err != nil {
 		logger.Error("Answer generation failed", zap.Error(err))
 		reporter.Send(NewStreamError(err.Error(), "Answer generation error"))

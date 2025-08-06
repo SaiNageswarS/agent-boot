@@ -3,17 +3,19 @@ package llm
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/ollama/ollama/api"
 )
 
 type OllamaLLMClient struct {
-	cli chatAPI
+	cli   chatAPI
+	model string
 }
 
-// ProvideOllamaClient creates a new Ollama LLM client
-func ProvideOllamaClient() LLMClient {
+// NewOllamaClient creates a new Ollama LLM client
+func NewOllamaClient(model string) LLMClient {
 	ollamaHost := os.Getenv("OLLAMA_HOST")
 	if ollamaHost == "" {
 		logger.Fatal("OLLAMA_HOST environment variable is not set")
@@ -21,13 +23,24 @@ func ProvideOllamaClient() LLMClient {
 	}
 
 	ollamaClient, _ := api.ClientFromEnvironment()
-	return &OllamaLLMClient{cli: ollamaClient}
+	return &OllamaLLMClient{cli: ollamaClient, model: model}
+}
+
+func (c *OllamaLLMClient) Capabilities() Capability {
+	if strings.HasPrefix(c.model, "gpt-oss") {
+		return NativeToolCalling
+	}
+	return 0
+}
+
+func (c *OllamaLLMClient) GetModel() string {
+	return c.model
 }
 
 func (c *OllamaLLMClient) GenerateInference(ctx context.Context, messages []Message, callback func(chunk string) error, opts ...LLMOption) error {
 	// Default settings
 	settings := LLMSettings{
-		model:       "llama3.2",
+		model:       c.model,
 		temperature: 0.7,
 		maxTokens:   4096,
 		stream:      false,

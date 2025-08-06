@@ -16,9 +16,10 @@ type AnthropicClient struct {
 	apiKey     string
 	httpClient *http.Client
 	url        string
+	model      string
 }
 
-func ProvideAnthropicClient() LLMClient {
+func NewAnthropicClient(model string) LLMClient {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
 		// Providers are designed for dependency injection.
@@ -31,12 +32,21 @@ func ProvideAnthropicClient() LLMClient {
 		apiKey:     apiKey,
 		httpClient: &http.Client{},
 		url:        "https://api.anthropic.com/v1/messages",
+		model:      model,
 	}
+}
+
+func (c *AnthropicClient) Capabilities() Capability {
+	return 0 // Anthropic does not support native tool calling
+}
+
+func (c *AnthropicClient) GetModel() string {
+	return c.model
 }
 
 func (c *AnthropicClient) GenerateInference(ctx context.Context, messages []Message, callback func(chunk string) error, opts ...LLMOption) error {
 	settings := LLMSettings{
-		model:       "claude-3-sonnet-20240229",
+		model:       c.model,
 		temperature: 0.7,
 		maxTokens:   4096,
 	}

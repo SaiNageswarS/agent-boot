@@ -30,7 +30,7 @@ func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]*s
 	// Create tool descriptions for the prompt
 	toolDescriptions := make([]string, 0, len(a.config.Tools))
 	for _, tool := range a.config.Tools {
-		toolDescriptions = append(toolDescriptions, fmt.Sprintf("- %s: %s", tool.Name, tool.Description))
+		toolDescriptions = append(toolDescriptions, fmt.Sprintf("- %s: %s", tool.Function.Name, tool.Function.Description))
 	}
 
 	// Prepare data for template rendering
@@ -76,7 +76,7 @@ func (a *Agent) SelectTools(ctx context.Context, req ToolSelectionRequest) ([]*s
 		if len(a.config.Tools) > 0 {
 			return []*schema.SelectedTool{
 				{
-					Name:       a.config.Tools[0].Name,
+					Name:       a.config.Tools[0].Function.Name,
 					Parameters: make(map[string]string),
 					Query:      req.Query,
 				},

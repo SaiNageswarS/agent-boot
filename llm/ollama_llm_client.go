@@ -90,6 +90,72 @@ func (c *OllamaLLMClient) GenerateInference(ctx context.Context, messages []Mess
 	return c.cli.Chat(ctx, req, responseFunc)
 }
 
+func (c *OllamaLLMClient) GenerateInferenceWithTools(
+	ctx context.Context,
+	messages []Message,
+	contentCallback func(chunk string) error,
+	toolCallback func(toolCalls []api.ToolCall) error,
+	opts ...LLMOption,
+) error {
+	// Default settings
+	settings := LLMSettings{
+		model:       c.model,
+		temperature: 0.7,
+		maxTokens:   4096,
+		stream:      false,
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(&settings)
+	}
+
+	// Convert messages to Ollama format
+	ollamaMessages := make([]api.Message, len(messages))
+	for i, msg := range messages {
+		ollamaMessages[i] = api.Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
+
+	req := &api.ChatRequest{
+		Model:    settings.model,
+		Messages: ollamaMessages,
+		Options: map[string]interface{}{
+			"temperature": settings.temperature,
+			"num_predict": settings.maxTokens,
+		},
+		Stream: &settings.stream,
+		Tools:  settings.tools,
+	}
+
+	// Add system prompt if provided
+	if settings.system != "" {
+		systemMsg := api.Message{
+			Role:    "system",
+			Content: settings.system,
+		}
+		req.Messages = append([]api.Message{systemMsg}, req.Messages...)
+	}
+
+	responseFunc := func(resp api.ChatResponse) error {
+		if resp.Message.Content != "" {
+			// Call the content callback with each chunk
+			return contentCallback(resp.Message.Content)
+		}
+
+		if len(resp.Message.ToolCalls) > 0 {
+			// Call the tool callback with tool calls
+			return toolCallback(resp.Message.ToolCalls)
+		}
+
+		return nil
+	}
+
+	return c.cli.Chat(ctx, req, responseFunc)
+}
+
 // chatAPI interface for Ollama chat operations
 type chatAPI interface {
 	Chat(ctx context.Context, req *api.ChatRequest, fn api.ChatResponseFunc) error

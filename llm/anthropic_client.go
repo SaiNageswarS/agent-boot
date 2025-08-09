@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/ollama/ollama/api"
 )
 
 type AnthropicClient struct {
@@ -103,6 +104,17 @@ func (c *AnthropicClient) GenerateInference(ctx context.Context, messages []Mess
 	}
 
 	return callback(response.Content[0].Text)
+}
+
+func (c *AnthropicClient) GenerateInferenceWithTools(
+	ctx context.Context,
+	messages []Message,
+	contentCallback func(chunk string) error,
+	toolCallback func(toolCalls []api.ToolCall) error,
+	opts ...LLMOption,
+) error {
+	// Anthropic doesn't support native tool calling, so we just use regular inference
+	return c.GenerateInference(ctx, messages, contentCallback, opts...)
 }
 
 type anthropicRequest struct {

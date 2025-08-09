@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/SaiNageswarS/agent-boot/schema"
+	"github.com/ollama/ollama/api"
 )
 
 func TestSelectToolsWithNoTools(t *testing.T) {
@@ -41,8 +42,29 @@ TOOL_SELECTION_END
 `
 
 	calcTool := MCPTool{
-		Name:        "calculator",
-		Description: "Performs calculations",
+		Tool: api.Tool{
+			Type: "function",
+			Function: api.ToolFunction{
+				Name:        "calculator",
+				Description: "Performs calculations",
+				Parameters: struct {
+					Type       string                      `json:"type"`
+					Defs       any                         `json:"$defs,omitempty"`
+					Items      any                         `json:"items,omitempty"`
+					Required   []string                    `json:"required"`
+					Properties map[string]api.ToolProperty `json:"properties"`
+				}{
+					Type:     "object",
+					Required: []string{"expression"},
+					Properties: map[string]api.ToolProperty{
+						"expression": {
+							Type:        []string{"string"},
+							Description: "Mathematical expression to evaluate",
+						},
+					},
+				},
+			},
+		},
 		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
 			result := NewMathToolResult("2+2", "4", []string{"Step 1: 2 + 2 = 4"})
 			ch := make(chan *schema.ToolExecutionResultChunk, 1)

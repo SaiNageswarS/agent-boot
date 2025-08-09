@@ -5,13 +5,30 @@ import (
 	"testing"
 
 	"github.com/SaiNageswarS/agent-boot/schema"
+	"github.com/ollama/ollama/api"
 )
 
 func TestExecuteTool(t *testing.T) {
 	handlerCalled := false
 	tool := MCPTool{
-		Name:        "test-tool",
-		Description: "Test tool",
+		Tool: api.Tool{
+			Type: "function",
+			Function: api.ToolFunction{
+				Name:        "test-tool",
+				Description: "Test tool",
+				Parameters: struct {
+					Type       string                      `json:"type"`
+					Defs       any                         `json:"$defs,omitempty"`
+					Items      any                         `json:"items,omitempty"`
+					Required   []string                    `json:"required"`
+					Properties map[string]api.ToolProperty `json:"properties"`
+				}{
+					Type:       "object",
+					Required:   []string{},
+					Properties: map[string]api.ToolProperty{},
+				},
+			},
+		},
 		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
 			handlerCalled = true
 			result := make(chan *schema.ToolExecutionResultChunk, 1)

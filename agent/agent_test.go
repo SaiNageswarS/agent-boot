@@ -8,6 +8,7 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/llm"
 	"github.com/SaiNageswarS/agent-boot/schema"
+	"github.com/ollama/ollama/api"
 )
 
 // mock llm client for testing different LLM calls
@@ -46,6 +47,17 @@ func (m *mockLLMClient) GenerateInference(
 	return callback("Default response")
 }
 
+func (m *mockLLMClient) GenerateInferenceWithTools(
+	ctx context.Context,
+	messages []llm.Message,
+	contentCallback func(chunk string) error,
+	toolCallback func(toolCalls []api.ToolCall) error,
+	opts ...llm.LLMOption,
+) error {
+	// For testing, just use the regular inference method
+	return m.GenerateInference(ctx, messages, contentCallback, opts...)
+}
+
 func TestNewAgent(t *testing.T) {
 	config := AgentConfig{
 		Tools:     []MCPTool{},
@@ -65,8 +77,24 @@ func TestNewAgent(t *testing.T) {
 
 func TestAddTool(t *testing.T) {
 	tool := MCPTool{
-		Name:        "test-tool",
-		Description: "A test tool",
+		Tool: api.Tool{
+			Type: "function",
+			Function: api.ToolFunction{
+				Name:        "test-tool",
+				Description: "A test tool",
+				Parameters: struct {
+					Type       string                      `json:"type"`
+					Defs       any                         `json:"$defs,omitempty"`
+					Items      any                         `json:"items,omitempty"`
+					Required   []string                    `json:"required"`
+					Properties map[string]api.ToolProperty `json:"properties"`
+				}{
+					Type:       "object",
+					Required:   []string{},
+					Properties: map[string]api.ToolProperty{},
+				},
+			},
+		},
 		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
 			result := make(chan *schema.ToolExecutionResultChunk, 1)
 			defer close(result)
@@ -85,8 +113,8 @@ func TestAddTool(t *testing.T) {
 		t.Fatalf("Expected 1 tool, got %d", len(tools))
 	}
 
-	if tools[0].Name != "test-tool" {
-		t.Errorf("Expected tool name 'test-tool', got '%s'", tools[0].Name)
+	if tools[0].Function.Name != "test-tool" {
+		t.Errorf("Expected tool name 'test-tool', got '%s'", tools[0].Function.Name)
 	}
 }
 
@@ -97,6 +125,7 @@ func TestGenerateAnswer(t *testing.T) {
 		WithMiniModel(&mockLLMClient{responses: []string{mockResponse}, model: "mini-model"}).
 		WithBigModel(&mockLLMClient{responses: []string{mockResponse}, model: "big-model"}).
 		WithMaxTokens(1000).
+		WithMaxTurns(0). // Disable turn-based execution for this test
 		Build()
 
 	req := &schema.GenerateAnswerRequest{
@@ -132,8 +161,29 @@ func TestGenerateAnswerWithTools(t *testing.T) {
 	}
 
 	calcTool := MCPTool{
-		Name:        "calculator",
-		Description: "Performs calculations",
+		Tool: api.Tool{
+			Type: "function",
+			Function: api.ToolFunction{
+				Name:        "calculator",
+				Description: "Performs calculations",
+				Parameters: struct {
+					Type       string                      `json:"type"`
+					Defs       any                         `json:"$defs,omitempty"`
+					Items      any                         `json:"items,omitempty"`
+					Required   []string                    `json:"required"`
+					Properties map[string]api.ToolProperty `json:"properties"`
+				}{
+					Type:     "object",
+					Required: []string{"expression"},
+					Properties: map[string]api.ToolProperty{
+						"expression": {
+							Type:        []string{"string"},
+							Description: "Mathematical expression to evaluate",
+						},
+					},
+				},
+			},
+		},
 		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
 			result := make(chan *schema.ToolExecutionResultChunk, 1)
 			defer close(result)
@@ -147,6 +197,7 @@ func TestGenerateAnswerWithTools(t *testing.T) {
 		WithMiniModel(mockClient).
 		WithBigModel(mockClient).
 		AddTool(calcTool).
+		WithMaxTurns(0). // Disable turn-based execution for this test
 		Build()
 
 	req := &schema.GenerateAnswerRequest{
@@ -173,6 +224,160 @@ func TestGenerateAnswerWithTools(t *testing.T) {
 	if response.Answer != answerResponse {
 		t.Errorf("Expected answer '%s', got '%s'", answerResponse, response.Answer)
 	}
+}
+
+// TestTurnBasedExecution tests the new turn-based execution mode
+func TestTurnBasedExecution(t *testing.T) {
+	finalAnswer := "The final answer is 4"
+
+	// Mock client that will provide final answer after tools are used
+	mockClient := &mockLLMClient{
+		responses: []string{finalAnswer},
+		model:     "test-model",
+	}
+
+	calcTool := MCPTool{
+		Tool: api.Tool{
+			Type: "function",
+			Function: api.ToolFunction{
+				Name:        "calculator",
+				Description: "Performs calculations",
+				Parameters: struct {
+					Type       string                      `json:"type"`
+					Defs       any                         `json:"$defs,omitempty"`
+					Items      any                         `json:"items,omitempty"`
+					Required   []string                    `json:"required"`
+					Properties map[string]api.ToolProperty `json:"properties"`
+				}{
+					Type:     "object",
+					Required: []string{"expression"},
+					Properties: map[string]api.ToolProperty{
+						"expression": {
+							Type:        []string{"string"},
+							Description: "Mathematical expression to evaluate",
+						},
+					},
+				},
+			},
+		},
+		Handler: func(ctx context.Context, params map[string]string) <-chan *schema.ToolExecutionResultChunk {
+			result := make(chan *schema.ToolExecutionResultChunk, 1)
+			defer close(result)
+
+			result <- NewMathToolResult("2+2", "4", []string{"Step 1: 2 + 2 = 4"})
+			return result
+		},
+	}
+
+	agent := NewAgentBuilder().
+		WithMiniModel(mockClient).
+		WithBigModel(mockClient).
+		AddTool(calcTool).
+		WithMaxTurns(2). // Enable turn-based execution
+		Build()
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "What is 2+2?",
+	}
+
+	response, err := agent.Execute(context.Background(), &NoOpProgressReporter{}, req)
+	if err != nil {
+		t.Fatalf("ExecuteTurnBased failed: %v", err)
+	}
+
+	// Should have used turn-based execution
+	if response.Metadata["native_tool_calling"] != "false" {
+		t.Errorf("Expected native_tool_calling to be false, got %s", response.Metadata["native_tool_calling"])
+	}
+
+	// Should have final answer
+	if response.Answer == "" {
+		t.Error("Expected non-empty answer")
+	}
+
+	// Should have processing metadata
+	if response.ProcessingTime < 0 {
+		t.Error("Expected non-negative processing time")
+	}
+
+	// Should have model information
+	if response.ModelUsed == "" {
+		t.Error("Expected model information")
+	}
+}
+
+// TestStreamingExecution tests that answer generation streams properly
+func TestStreamingExecution(t *testing.T) {
+	finalAnswer := "This is a streaming answer"
+
+	// Mock client that will provide multiple responses for the turn-based execution
+	mockClient := &mockLLMClient{
+		responses: []string{
+			"Tool selection failed", // First call (tool selection)
+			finalAnswer,             // Second call (final answer generation)
+			finalAnswer,             // Extra responses in case more calls are needed
+		},
+		model: "test-model",
+	}
+
+	// Mock reporter that captures streaming events
+	streamingReporter := &StreamingTestReporter{
+		chunks: make([]*schema.AnswerChunk, 0),
+	}
+
+	// Create agent without tools to force direct answer generation
+	agent := NewAgentBuilder().
+		WithMiniModel(mockClient).
+		WithBigModel(mockClient).
+		WithMaxTurns(1).
+		Build()
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "Tell me something",
+	}
+
+	response, err := agent.Execute(context.Background(), streamingReporter, req)
+	if err != nil {
+		t.Fatalf("ExecuteTurnBased failed: %v", err)
+	}
+
+	// Should have received streaming chunks
+	if len(streamingReporter.chunks) == 0 {
+		t.Error("Expected to receive streaming answer chunks")
+	}
+
+	// Final response should have the complete answer (or the fallback final answer)
+	if response.Answer == "" {
+		t.Error("Expected non-empty final answer")
+	}
+
+	// Should have at least one final chunk (the complete answer)
+	hasFinal := false
+	for _, chunk := range streamingReporter.chunks {
+		if chunk.IsFinal {
+			hasFinal = true
+		}
+	}
+
+	if !hasFinal {
+		t.Error("Expected to receive final answer chunk")
+	}
+
+	t.Logf("Received %d streaming chunks", len(streamingReporter.chunks))
+	t.Logf("Final answer: %s", response.Answer)
+}
+
+// StreamingTestReporter captures streaming events for testing
+type StreamingTestReporter struct {
+	chunks []*schema.AnswerChunk
+}
+
+func (r *StreamingTestReporter) Send(event *schema.AgentStreamChunk) error {
+	switch chunk := event.ChunkType.(type) {
+	case *schema.AgentStreamChunk_Answer:
+		r.chunks = append(r.chunks, chunk.Answer)
+	}
+	return nil
 }
 
 func TestShouldUseBigModel(t *testing.T) {

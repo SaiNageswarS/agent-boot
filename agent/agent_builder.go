@@ -7,7 +7,11 @@ type AgentBuilder struct {
 }
 
 func NewAgentBuilder() *AgentBuilder {
-	return &AgentBuilder{}
+	return &AgentBuilder{
+		config: AgentConfig{
+			MaxTurns: 5,
+		},
+	}
 }
 
 func (b *AgentBuilder) WithMiniModel(client llm.LLMClient) *AgentBuilder {
@@ -32,6 +36,11 @@ func (b *AgentBuilder) WithPrompt(prompt PromptTemplate) *AgentBuilder {
 
 func (b *AgentBuilder) WithMaxTokens(max int) *AgentBuilder {
 	b.config.MaxTokens = max
+	return b
+}
+
+func (b *AgentBuilder) WithMaxTurns(maxTurns int) *AgentBuilder {
+	b.config.MaxTurns = maxTurns
 	return b
 }
 

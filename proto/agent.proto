@@ -18,8 +18,7 @@ message GenerateAnswerRequest {
 message AgentStreamChunk {
     oneof chunk_type {
         ProgressUpdateChunk      progressUpdateChunk = 1;
-        SelectedTool             selectedTool        = 2;
-        ToolExecutionResultChunk toolExecutionResultChunk = 3;
+        ToolResultChunk          toolResultChunk = 3;
         AnswerChunk              answer = 4;
         StreamComplete           complete = 5;
         StreamError              error = 6;
@@ -44,20 +43,12 @@ message ProgressUpdateChunk {
     Stage stage = 1;
     int64 timestamp = 2;
     string message = 3;
-    int32 currentStep = 4;
     int32 estimatedSteps = 5;
-}
-
-// Tool Selection Result
-message SelectedTool {
-    string name = 1;
-    map<string, string> parameters = 2;
-    string query = 3;
 }
 
 // Raw result chunk of a single tool.
 // A single tool can emit multiple ToolExecutionResultChunk.
-message ToolExecutionResultChunk {
+message ToolResultChunk {
     repeated string sentences = 1;
     string attribution = 2;
     string title = 3;
@@ -68,19 +59,17 @@ message ToolExecutionResultChunk {
 
 // Final Answer Chunk
 message AnswerChunk {
-    string answer = 1;
-    repeated string toolsUsed = 2;
-    int32 tokenUsed = 3;
-    int64 processingTime = 4;
-    string promptUsed = 5;
-    string modelUsed = 6;
-    map<string, string> metadata = 7;
-    bool is_final = 8;
+    string content = 1;
 }
 
 // End of Streaming.
 message StreamComplete {
     string final_status = 1;
+    string answer = 2;
+    int32 tokenUsed = 3;
+    int64 processingTime = 4;
+    map<string, string> metadata = 5;
+    repeated string toolsUsed = 6;
 }
 
 // Error chunk

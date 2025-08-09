@@ -165,8 +165,7 @@ type AgentStreamChunk struct {
 	// Types that are valid to be assigned to ChunkType:
 	//
 	//	*AgentStreamChunk_ProgressUpdateChunk
-	//	*AgentStreamChunk_SelectedTool
-	//	*AgentStreamChunk_ToolExecutionResultChunk
+	//	*AgentStreamChunk_ToolResultChunk
 	//	*AgentStreamChunk_Answer
 	//	*AgentStreamChunk_Complete
 	//	*AgentStreamChunk_Error
@@ -221,19 +220,10 @@ func (x *AgentStreamChunk) GetProgressUpdateChunk() *ProgressUpdateChunk {
 	return nil
 }
 
-func (x *AgentStreamChunk) GetSelectedTool() *SelectedTool {
+func (x *AgentStreamChunk) GetToolResultChunk() *ToolResultChunk {
 	if x != nil {
-		if x, ok := x.ChunkType.(*AgentStreamChunk_SelectedTool); ok {
-			return x.SelectedTool
-		}
-	}
-	return nil
-}
-
-func (x *AgentStreamChunk) GetToolExecutionResultChunk() *ToolExecutionResultChunk {
-	if x != nil {
-		if x, ok := x.ChunkType.(*AgentStreamChunk_ToolExecutionResultChunk); ok {
-			return x.ToolExecutionResultChunk
+		if x, ok := x.ChunkType.(*AgentStreamChunk_ToolResultChunk); ok {
+			return x.ToolResultChunk
 		}
 	}
 	return nil
@@ -274,12 +264,8 @@ type AgentStreamChunk_ProgressUpdateChunk struct {
 	ProgressUpdateChunk *ProgressUpdateChunk `protobuf:"bytes,1,opt,name=progressUpdateChunk,proto3,oneof"`
 }
 
-type AgentStreamChunk_SelectedTool struct {
-	SelectedTool *SelectedTool `protobuf:"bytes,2,opt,name=selectedTool,proto3,oneof"`
-}
-
-type AgentStreamChunk_ToolExecutionResultChunk struct {
-	ToolExecutionResultChunk *ToolExecutionResultChunk `protobuf:"bytes,3,opt,name=toolExecutionResultChunk,proto3,oneof"`
+type AgentStreamChunk_ToolResultChunk struct {
+	ToolResultChunk *ToolResultChunk `protobuf:"bytes,3,opt,name=toolResultChunk,proto3,oneof"`
 }
 
 type AgentStreamChunk_Answer struct {
@@ -296,9 +282,7 @@ type AgentStreamChunk_Error struct {
 
 func (*AgentStreamChunk_ProgressUpdateChunk) isAgentStreamChunk_ChunkType() {}
 
-func (*AgentStreamChunk_SelectedTool) isAgentStreamChunk_ChunkType() {}
-
-func (*AgentStreamChunk_ToolExecutionResultChunk) isAgentStreamChunk_ChunkType() {}
+func (*AgentStreamChunk_ToolResultChunk) isAgentStreamChunk_ChunkType() {}
 
 func (*AgentStreamChunk_Answer) isAgentStreamChunk_ChunkType() {}
 
@@ -311,7 +295,6 @@ type ProgressUpdateChunk struct {
 	Stage          Stage                  `protobuf:"varint,1,opt,name=stage,proto3,enum=agent.Stage" json:"stage,omitempty"`
 	Timestamp      int64                  `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	Message        string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
-	CurrentStep    int32                  `protobuf:"varint,4,opt,name=currentStep,proto3" json:"currentStep,omitempty"`
 	EstimatedSteps int32                  `protobuf:"varint,5,opt,name=estimatedSteps,proto3" json:"estimatedSteps,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -368,13 +351,6 @@ func (x *ProgressUpdateChunk) GetMessage() string {
 	return ""
 }
 
-func (x *ProgressUpdateChunk) GetCurrentStep() int32 {
-	if x != nil {
-		return x.CurrentStep
-	}
-	return 0
-}
-
 func (x *ProgressUpdateChunk) GetEstimatedSteps() int32 {
 	if x != nil {
 		return x.EstimatedSteps
@@ -382,70 +358,9 @@ func (x *ProgressUpdateChunk) GetEstimatedSteps() int32 {
 	return 0
 }
 
-// Tool Selection Result
-type SelectedTool struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Parameters    map[string]string      `protobuf:"bytes,2,rep,name=parameters,proto3" json:"parameters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Query         string                 `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SelectedTool) Reset() {
-	*x = SelectedTool{}
-	mi := &file_agent_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SelectedTool) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SelectedTool) ProtoMessage() {}
-
-func (x *SelectedTool) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SelectedTool.ProtoReflect.Descriptor instead.
-func (*SelectedTool) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *SelectedTool) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *SelectedTool) GetParameters() map[string]string {
-	if x != nil {
-		return x.Parameters
-	}
-	return nil
-}
-
-func (x *SelectedTool) GetQuery() string {
-	if x != nil {
-		return x.Query
-	}
-	return ""
-}
-
 // Raw result chunk of a single tool.
 // A single tool can emit multiple ToolExecutionResultChunk.
-type ToolExecutionResultChunk struct {
+type ToolResultChunk struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Sentences     []string               `protobuf:"bytes,1,rep,name=sentences,proto3" json:"sentences,omitempty"`
 	Attribution   string                 `protobuf:"bytes,2,opt,name=attribution,proto3" json:"attribution,omitempty"`
@@ -457,21 +372,21 @@ type ToolExecutionResultChunk struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ToolExecutionResultChunk) Reset() {
-	*x = ToolExecutionResultChunk{}
-	mi := &file_agent_proto_msgTypes[4]
+func (x *ToolResultChunk) Reset() {
+	*x = ToolResultChunk{}
+	mi := &file_agent_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ToolExecutionResultChunk) String() string {
+func (x *ToolResultChunk) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ToolExecutionResultChunk) ProtoMessage() {}
+func (*ToolResultChunk) ProtoMessage() {}
 
-func (x *ToolExecutionResultChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[4]
+func (x *ToolResultChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -482,47 +397,47 @@ func (x *ToolExecutionResultChunk) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ToolExecutionResultChunk.ProtoReflect.Descriptor instead.
-func (*ToolExecutionResultChunk) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use ToolResultChunk.ProtoReflect.Descriptor instead.
+func (*ToolResultChunk) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ToolExecutionResultChunk) GetSentences() []string {
+func (x *ToolResultChunk) GetSentences() []string {
 	if x != nil {
 		return x.Sentences
 	}
 	return nil
 }
 
-func (x *ToolExecutionResultChunk) GetAttribution() string {
+func (x *ToolResultChunk) GetAttribution() string {
 	if x != nil {
 		return x.Attribution
 	}
 	return ""
 }
 
-func (x *ToolExecutionResultChunk) GetTitle() string {
+func (x *ToolResultChunk) GetTitle() string {
 	if x != nil {
 		return x.Title
 	}
 	return ""
 }
 
-func (x *ToolExecutionResultChunk) GetMetadata() map[string]string {
+func (x *ToolResultChunk) GetMetadata() map[string]string {
 	if x != nil {
 		return x.Metadata
 	}
 	return nil
 }
 
-func (x *ToolExecutionResultChunk) GetToolName() string {
+func (x *ToolResultChunk) GetToolName() string {
 	if x != nil {
 		return x.ToolName
 	}
 	return ""
 }
 
-func (x *ToolExecutionResultChunk) GetError() string {
+func (x *ToolResultChunk) GetError() string {
 	if x != nil {
 		return x.Error
 	}
@@ -531,22 +446,15 @@ func (x *ToolExecutionResultChunk) GetError() string {
 
 // Final Answer Chunk
 type AnswerChunk struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Answer         string                 `protobuf:"bytes,1,opt,name=answer,proto3" json:"answer,omitempty"`
-	ToolsUsed      []string               `protobuf:"bytes,2,rep,name=toolsUsed,proto3" json:"toolsUsed,omitempty"`
-	TokenUsed      int32                  `protobuf:"varint,3,opt,name=tokenUsed,proto3" json:"tokenUsed,omitempty"`
-	ProcessingTime int64                  `protobuf:"varint,4,opt,name=processingTime,proto3" json:"processingTime,omitempty"`
-	PromptUsed     string                 `protobuf:"bytes,5,opt,name=promptUsed,proto3" json:"promptUsed,omitempty"`
-	ModelUsed      string                 `protobuf:"bytes,6,opt,name=modelUsed,proto3" json:"modelUsed,omitempty"`
-	Metadata       map[string]string      `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	IsFinal        bool                   `protobuf:"varint,8,opt,name=is_final,json=isFinal,proto3" json:"is_final,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AnswerChunk) Reset() {
 	*x = AnswerChunk{}
-	mi := &file_agent_proto_msgTypes[5]
+	mi := &file_agent_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -558,7 +466,7 @@ func (x *AnswerChunk) String() string {
 func (*AnswerChunk) ProtoMessage() {}
 
 func (x *AnswerChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[5]
+	mi := &file_agent_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -571,76 +479,32 @@ func (x *AnswerChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerChunk.ProtoReflect.Descriptor instead.
 func (*AnswerChunk) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{5}
+	return file_agent_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *AnswerChunk) GetAnswer() string {
+func (x *AnswerChunk) GetContent() string {
 	if x != nil {
-		return x.Answer
+		return x.Content
 	}
 	return ""
-}
-
-func (x *AnswerChunk) GetToolsUsed() []string {
-	if x != nil {
-		return x.ToolsUsed
-	}
-	return nil
-}
-
-func (x *AnswerChunk) GetTokenUsed() int32 {
-	if x != nil {
-		return x.TokenUsed
-	}
-	return 0
-}
-
-func (x *AnswerChunk) GetProcessingTime() int64 {
-	if x != nil {
-		return x.ProcessingTime
-	}
-	return 0
-}
-
-func (x *AnswerChunk) GetPromptUsed() string {
-	if x != nil {
-		return x.PromptUsed
-	}
-	return ""
-}
-
-func (x *AnswerChunk) GetModelUsed() string {
-	if x != nil {
-		return x.ModelUsed
-	}
-	return ""
-}
-
-func (x *AnswerChunk) GetMetadata() map[string]string {
-	if x != nil {
-		return x.Metadata
-	}
-	return nil
-}
-
-func (x *AnswerChunk) GetIsFinal() bool {
-	if x != nil {
-		return x.IsFinal
-	}
-	return false
 }
 
 // End of Streaming.
 type StreamComplete struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FinalStatus   string                 `protobuf:"bytes,1,opt,name=final_status,json=finalStatus,proto3" json:"final_status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	FinalStatus    string                 `protobuf:"bytes,1,opt,name=final_status,json=finalStatus,proto3" json:"final_status,omitempty"`
+	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	TokenUsed      int32                  `protobuf:"varint,3,opt,name=tokenUsed,proto3" json:"tokenUsed,omitempty"`
+	ProcessingTime int64                  `protobuf:"varint,4,opt,name=processingTime,proto3" json:"processingTime,omitempty"`
+	Metadata       map[string]string      `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ToolsUsed      []string               `protobuf:"bytes,6,rep,name=toolsUsed,proto3" json:"toolsUsed,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *StreamComplete) Reset() {
 	*x = StreamComplete{}
-	mi := &file_agent_proto_msgTypes[6]
+	mi := &file_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -652,7 +516,7 @@ func (x *StreamComplete) String() string {
 func (*StreamComplete) ProtoMessage() {}
 
 func (x *StreamComplete) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[6]
+	mi := &file_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -665,7 +529,7 @@ func (x *StreamComplete) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamComplete.ProtoReflect.Descriptor instead.
 func (*StreamComplete) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{6}
+	return file_agent_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StreamComplete) GetFinalStatus() string {
@@ -673,6 +537,41 @@ func (x *StreamComplete) GetFinalStatus() string {
 		return x.FinalStatus
 	}
 	return ""
+}
+
+func (x *StreamComplete) GetAnswer() string {
+	if x != nil {
+		return x.Answer
+	}
+	return ""
+}
+
+func (x *StreamComplete) GetTokenUsed() int32 {
+	if x != nil {
+		return x.TokenUsed
+	}
+	return 0
+}
+
+func (x *StreamComplete) GetProcessingTime() int64 {
+	if x != nil {
+		return x.ProcessingTime
+	}
+	return 0
+}
+
+func (x *StreamComplete) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+func (x *StreamComplete) GetToolsUsed() []string {
+	if x != nil {
+		return x.ToolsUsed
+	}
+	return nil
 }
 
 // Error chunk
@@ -686,7 +585,7 @@ type StreamError struct {
 
 func (x *StreamError) Reset() {
 	*x = StreamError{}
-	mi := &file_agent_proto_msgTypes[7]
+	mi := &file_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -698,7 +597,7 @@ func (x *StreamError) String() string {
 func (*StreamError) ProtoMessage() {}
 
 func (x *StreamError) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[7]
+	mi := &file_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -711,7 +610,7 @@ func (x *StreamError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamError.ProtoReflect.Descriptor instead.
 func (*StreamError) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{7}
+	return file_agent_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *StreamError) GetErrorMessage() string {
@@ -740,57 +639,42 @@ const file_agent_proto_rawDesc = "" +
 	"\bmetadata\x18\x04 \x03(\v2*.agent.GenerateAnswerRequest.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x99\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc3\x02\n" +
 	"\x10AgentStreamChunk\x12N\n" +
-	"\x13progressUpdateChunk\x18\x01 \x01(\v2\x1a.agent.ProgressUpdateChunkH\x00R\x13progressUpdateChunk\x129\n" +
-	"\fselectedTool\x18\x02 \x01(\v2\x13.agent.SelectedToolH\x00R\fselectedTool\x12]\n" +
-	"\x18toolExecutionResultChunk\x18\x03 \x01(\v2\x1f.agent.ToolExecutionResultChunkH\x00R\x18toolExecutionResultChunk\x12,\n" +
+	"\x13progressUpdateChunk\x18\x01 \x01(\v2\x1a.agent.ProgressUpdateChunkH\x00R\x13progressUpdateChunk\x12B\n" +
+	"\x0ftoolResultChunk\x18\x03 \x01(\v2\x16.agent.ToolResultChunkH\x00R\x0ftoolResultChunk\x12,\n" +
 	"\x06answer\x18\x04 \x01(\v2\x12.agent.AnswerChunkH\x00R\x06answer\x123\n" +
 	"\bcomplete\x18\x05 \x01(\v2\x15.agent.StreamCompleteH\x00R\bcomplete\x12*\n" +
 	"\x05error\x18\x06 \x01(\v2\x12.agent.StreamErrorH\x00R\x05errorB\f\n" +
 	"\n" +
-	"chunk_type\"\xbb\x01\n" +
+	"chunk_type\"\x99\x01\n" +
 	"\x13ProgressUpdateChunk\x12\"\n" +
 	"\x05stage\x18\x01 \x01(\x0e2\f.agent.StageR\x05stage\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\x12 \n" +
-	"\vcurrentStep\x18\x04 \x01(\x05R\vcurrentStep\x12&\n" +
-	"\x0eestimatedSteps\x18\x05 \x01(\x05R\x0eestimatedSteps\"\xbc\x01\n" +
-	"\fSelectedTool\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12C\n" +
-	"\n" +
-	"parameters\x18\x02 \x03(\v2#.agent.SelectedTool.ParametersEntryR\n" +
-	"parameters\x12\x14\n" +
-	"\x05query\x18\x03 \x01(\tR\x05query\x1a=\n" +
-	"\x0fParametersEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xaa\x02\n" +
-	"\x18ToolExecutionResultChunk\x12\x1c\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\x12&\n" +
+	"\x0eestimatedSteps\x18\x05 \x01(\x05R\x0eestimatedSteps\"\x98\x02\n" +
+	"\x0fToolResultChunk\x12\x1c\n" +
 	"\tsentences\x18\x01 \x03(\tR\tsentences\x12 \n" +
 	"\vattribution\x18\x02 \x01(\tR\vattribution\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05title\x12I\n" +
-	"\bmetadata\x18\x04 \x03(\v2-.agent.ToolExecutionResultChunk.MetadataEntryR\bmetadata\x12\x1a\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12@\n" +
+	"\bmetadata\x18\x04 \x03(\v2$.agent.ToolResultChunk.MetadataEntryR\bmetadata\x12\x1a\n" +
 	"\btoolName\x18\x05 \x01(\tR\btoolName\x12\x14\n" +
 	"\x05error\x18\x06 \x01(\tR\x05error\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdd\x02\n" +
-	"\vAnswerChunk\x12\x16\n" +
-	"\x06answer\x18\x01 \x01(\tR\x06answer\x12\x1c\n" +
-	"\ttoolsUsed\x18\x02 \x03(\tR\ttoolsUsed\x12\x1c\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"'\n" +
+	"\vAnswerChunk\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent\"\xad\x02\n" +
+	"\x0eStreamComplete\x12!\n" +
+	"\ffinal_status\x18\x01 \x01(\tR\vfinalStatus\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12\x1c\n" +
 	"\ttokenUsed\x18\x03 \x01(\x05R\ttokenUsed\x12&\n" +
-	"\x0eprocessingTime\x18\x04 \x01(\x03R\x0eprocessingTime\x12\x1e\n" +
-	"\n" +
-	"promptUsed\x18\x05 \x01(\tR\n" +
-	"promptUsed\x12\x1c\n" +
-	"\tmodelUsed\x18\x06 \x01(\tR\tmodelUsed\x12<\n" +
-	"\bmetadata\x18\a \x03(\v2 .agent.AnswerChunk.MetadataEntryR\bmetadata\x12\x19\n" +
-	"\bis_final\x18\b \x01(\bR\aisFinal\x1a;\n" +
+	"\x0eprocessingTime\x18\x04 \x01(\x03R\x0eprocessingTime\x12?\n" +
+	"\bmetadata\x18\x05 \x03(\v2#.agent.StreamComplete.MetadataEntryR\bmetadata\x12\x1c\n" +
+	"\ttoolsUsed\x18\x06 \x03(\tR\ttoolsUsed\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"3\n" +
-	"\x0eStreamComplete\x12!\n" +
-	"\ffinal_status\x18\x01 \x01(\tR\vfinalStatus\"Q\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Q\n" +
 	"\vStreamError\x12#\n" +
 	"\rerror_message\x18\x01 \x01(\tR\ferrorMessage\x12\x1d\n" +
 	"\n" +
@@ -822,41 +706,37 @@ func file_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_agent_proto_goTypes = []any{
-	(Stage)(0),                       // 0: agent.Stage
-	(*GenerateAnswerRequest)(nil),    // 1: agent.GenerateAnswerRequest
-	(*AgentStreamChunk)(nil),         // 2: agent.AgentStreamChunk
-	(*ProgressUpdateChunk)(nil),      // 3: agent.ProgressUpdateChunk
-	(*SelectedTool)(nil),             // 4: agent.SelectedTool
-	(*ToolExecutionResultChunk)(nil), // 5: agent.ToolExecutionResultChunk
-	(*AnswerChunk)(nil),              // 6: agent.AnswerChunk
-	(*StreamComplete)(nil),           // 7: agent.StreamComplete
-	(*StreamError)(nil),              // 8: agent.StreamError
-	nil,                              // 9: agent.GenerateAnswerRequest.MetadataEntry
-	nil,                              // 10: agent.SelectedTool.ParametersEntry
-	nil,                              // 11: agent.ToolExecutionResultChunk.MetadataEntry
-	nil,                              // 12: agent.AnswerChunk.MetadataEntry
+	(Stage)(0),                    // 0: agent.Stage
+	(*GenerateAnswerRequest)(nil), // 1: agent.GenerateAnswerRequest
+	(*AgentStreamChunk)(nil),      // 2: agent.AgentStreamChunk
+	(*ProgressUpdateChunk)(nil),   // 3: agent.ProgressUpdateChunk
+	(*ToolResultChunk)(nil),       // 4: agent.ToolResultChunk
+	(*AnswerChunk)(nil),           // 5: agent.AnswerChunk
+	(*StreamComplete)(nil),        // 6: agent.StreamComplete
+	(*StreamError)(nil),           // 7: agent.StreamError
+	nil,                           // 8: agent.GenerateAnswerRequest.MetadataEntry
+	nil,                           // 9: agent.ToolResultChunk.MetadataEntry
+	nil,                           // 10: agent.StreamComplete.MetadataEntry
 }
 var file_agent_proto_depIdxs = []int32{
-	9,  // 0: agent.GenerateAnswerRequest.metadata:type_name -> agent.GenerateAnswerRequest.MetadataEntry
+	8,  // 0: agent.GenerateAnswerRequest.metadata:type_name -> agent.GenerateAnswerRequest.MetadataEntry
 	3,  // 1: agent.AgentStreamChunk.progressUpdateChunk:type_name -> agent.ProgressUpdateChunk
-	4,  // 2: agent.AgentStreamChunk.selectedTool:type_name -> agent.SelectedTool
-	5,  // 3: agent.AgentStreamChunk.toolExecutionResultChunk:type_name -> agent.ToolExecutionResultChunk
-	6,  // 4: agent.AgentStreamChunk.answer:type_name -> agent.AnswerChunk
-	7,  // 5: agent.AgentStreamChunk.complete:type_name -> agent.StreamComplete
-	8,  // 6: agent.AgentStreamChunk.error:type_name -> agent.StreamError
-	0,  // 7: agent.ProgressUpdateChunk.stage:type_name -> agent.Stage
-	10, // 8: agent.SelectedTool.parameters:type_name -> agent.SelectedTool.ParametersEntry
-	11, // 9: agent.ToolExecutionResultChunk.metadata:type_name -> agent.ToolExecutionResultChunk.MetadataEntry
-	12, // 10: agent.AnswerChunk.metadata:type_name -> agent.AnswerChunk.MetadataEntry
-	1,  // 11: agent.Agent.Execute:input_type -> agent.GenerateAnswerRequest
-	2,  // 12: agent.Agent.Execute:output_type -> agent.AgentStreamChunk
-	12, // [12:13] is the sub-list for method output_type
-	11, // [11:12] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	4,  // 2: agent.AgentStreamChunk.toolResultChunk:type_name -> agent.ToolResultChunk
+	5,  // 3: agent.AgentStreamChunk.answer:type_name -> agent.AnswerChunk
+	6,  // 4: agent.AgentStreamChunk.complete:type_name -> agent.StreamComplete
+	7,  // 5: agent.AgentStreamChunk.error:type_name -> agent.StreamError
+	0,  // 6: agent.ProgressUpdateChunk.stage:type_name -> agent.Stage
+	9,  // 7: agent.ToolResultChunk.metadata:type_name -> agent.ToolResultChunk.MetadataEntry
+	10, // 8: agent.StreamComplete.metadata:type_name -> agent.StreamComplete.MetadataEntry
+	1,  // 9: agent.Agent.Execute:input_type -> agent.GenerateAnswerRequest
+	2,  // 10: agent.Agent.Execute:output_type -> agent.AgentStreamChunk
+	10, // [10:11] is the sub-list for method output_type
+	9,  // [9:10] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_agent_proto_init() }
@@ -866,8 +746,7 @@ func file_agent_proto_init() {
 	}
 	file_agent_proto_msgTypes[1].OneofWrappers = []any{
 		(*AgentStreamChunk_ProgressUpdateChunk)(nil),
-		(*AgentStreamChunk_SelectedTool)(nil),
-		(*AgentStreamChunk_ToolExecutionResultChunk)(nil),
+		(*AgentStreamChunk_ToolResultChunk)(nil),
 		(*AgentStreamChunk_Answer)(nil),
 		(*AgentStreamChunk_Complete)(nil),
 		(*AgentStreamChunk_Error)(nil),
@@ -878,7 +757,7 @@ func file_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   12,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

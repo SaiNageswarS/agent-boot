@@ -32,36 +32,26 @@ func (r *GrpcProgressReporter) Send(event *schema.AgentStreamChunk) error {
 }
 
 // Helper functions for creating progress events
-func NewProgressUpdate(stage schema.Stage, message string, current int32) *schema.AgentStreamChunk {
+func NewProgressUpdate(stage schema.Stage, message string) *schema.AgentStreamChunk {
 	return &schema.AgentStreamChunk{
 		ChunkType: &schema.AgentStreamChunk_ProgressUpdateChunk{
 			ProgressUpdateChunk: &schema.ProgressUpdateChunk{
 				Stage:          stage,
 				Timestamp:      time.Now().UnixMilli(),
 				Message:        message,
-				CurrentStep:    current,
 				EstimatedSteps: 3,
 			},
 		},
 	}
 }
 
-// NewToolSelectionResult creates a ToolSelectionResult chunk
-func NewToolSelectionResult(selectedTool *schema.SelectedTool) *schema.AgentStreamChunk {
-	return &schema.AgentStreamChunk{
-		ChunkType: &schema.AgentStreamChunk_SelectedTool{
-			SelectedTool: selectedTool,
-		},
-	}
-}
-
 // NewToolExecutionResult creates a ToolExecutionResultChunk chunk
-func NewToolExecutionResult(toolName string, result *schema.ToolExecutionResultChunk) *schema.AgentStreamChunk {
+func NewToolExecutionResult(toolName string, result *schema.ToolResultChunk) *schema.AgentStreamChunk {
 	result.ToolName = toolName
 
 	return &schema.AgentStreamChunk{
-		ChunkType: &schema.AgentStreamChunk_ToolExecutionResultChunk{
-			ToolExecutionResultChunk: result,
+		ChunkType: &schema.AgentStreamChunk_ToolResultChunk{
+			ToolResultChunk: result,
 		},
 	}
 }
@@ -76,12 +66,10 @@ func NewAnswerChunk(answerChunk *schema.AnswerChunk) *schema.AgentStreamChunk {
 }
 
 // NewStreamComplete creates a StreamComplete chunk
-func NewStreamComplete(status string) *schema.AgentStreamChunk {
+func NewStreamComplete(finalResponse *schema.StreamComplete) *schema.AgentStreamChunk {
 	return &schema.AgentStreamChunk{
 		ChunkType: &schema.AgentStreamChunk_Complete{
-			Complete: &schema.StreamComplete{
-				FinalStatus: status,
-			},
+			Complete: finalResponse,
 		},
 	}
 }

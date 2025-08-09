@@ -9,7 +9,8 @@ type AgentBuilder struct {
 func NewAgentBuilder() *AgentBuilder {
 	return &AgentBuilder{
 		config: AgentConfig{
-			MaxTurns: 5,
+			MaxTurns:  5,
+			MaxTokens: 2000,
 		},
 	}
 }

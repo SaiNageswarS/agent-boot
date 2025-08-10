@@ -1,0 +1,569 @@
+package agent
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/SaiNageswarS/agent-boot/llm"
+	"github.com/SaiNageswarS/agent-boot/schema"
+	"github.com/ollama/ollama/api"
+	"github.com/stretchr/testify/assert"
+)
+
+// MockProgressReporter implements ProgressReporter for testing
+type MockProgressReporter struct {
+	events []*schema.AgentStreamChunk
+}
+
+func (m *MockProgressReporter) Send(event *schema.AgentStreamChunk) error {
+	m.events = append(m.events, event)
+	return nil
+}
+
+func (m *MockProgressReporter) GetEvents() []*schema.AgentStreamChunk {
+	return m.events
+}
+
+func (m *MockProgressReporter) GetEventCount() int {
+	return len(m.events)
+}
+
+func (m *MockProgressReporter) Reset() {
+	m.events = nil
+}
+
+// Enhanced mock LLM client with configurable responses
+type testLLMClient struct {
+	model            string
+	response         string
+	toolCalls        []api.ToolCall
+	shouldError      bool
+	errorMessage     string
+	callCount        int
+	responses        []string
+	toolCallsPerTurn [][]api.ToolCall
+}
+
+func (m *testLLMClient) GenerateInference(
+	ctx context.Context,
+	messages []llm.Message,
+	callback func(chunk string) error,
+	opts ...llm.LLMOption,
+) error {
+	if m.shouldError {
+		return errors.New(m.errorMessage)
+	}
+
+	response := m.response
+	if m.callCount < len(m.responses) {
+		response = m.responses[m.callCount]
+	}
+	m.callCount++
+
+	return callback(response)
+}
+
+func (m *testLLMClient) GenerateInferenceWithTools(
+	ctx context.Context,
+	messages []llm.Message,
+	contentCallback func(chunk string) error,
+	toolCallback func(toolCalls []api.ToolCall) error,
+	opts ...llm.LLMOption,
+) error {
+	if m.shouldError {
+		return errors.New(m.errorMessage)
+	}
+
+	response := m.response
+	var toolCalls []api.ToolCall
+
+	if m.callCount < len(m.responses) {
+		response = m.responses[m.callCount]
+	}
+	if m.callCount < len(m.toolCallsPerTurn) {
+		toolCalls = m.toolCallsPerTurn[m.callCount]
+	} else if len(m.toolCalls) > 0 && m.callCount == 0 {
+		toolCalls = m.toolCalls
+	}
+
+	m.callCount++
+
+	if len(toolCalls) > 0 {
+		return toolCallback(toolCalls)
+	}
+
+	return contentCallback(response)
+}
+
+func (m *testLLMClient) Capabilities() llm.Capability {
+	return llm.NativeToolCalling
+}
+
+func (m *testLLMClient) GetModel() string {
+	return m.model
+}
+
+func TestAgentExecute(t *testing.T) {
+	// Setup
+	mockBigModel := &testLLMClient{
+		model:    "test-big-model",
+		response: "This is the final answer",
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		MaxTokens: 1000,
+		MaxTurns:  3,
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "What is 2+2?",
+		Context:  "Solve this math problem",
+	}
+
+	// Execute
+	result, err := agent.Execute(context.Background(), reporter, req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "This is the final answer", result.Answer)
+	assert.GreaterOrEqual(t, result.ProcessingTime, int64(0))
+	assert.NotNil(t, result.ToolsUsed)
+	assert.NotNil(t, result.Metadata)
+
+	// Check the final StreamComplete event was sent
+	events := reporter.GetEvents()
+	hasCompleteEvent := false
+	for _, event := range events {
+		if event.GetComplete() != nil {
+			hasCompleteEvent = true
+			break
+		}
+	}
+	assert.True(t, hasCompleteEvent, "Should have sent a StreamComplete event")
+}
+
+func TestAgentExecuteWithTools(t *testing.T) {
+	// Setup mock tool
+	mockTool := MCPTool{
+		Tool: api.Tool{
+			Function: api.ToolFunction{
+				Name: "calculator",
+			},
+		},
+		Handler: func(ctx context.Context, params api.ToolCallFunctionArguments) <-chan *schema.ToolResultChunk {
+			ch := make(chan *schema.ToolResultChunk, 1)
+			ch <- &schema.ToolResultChunk{
+				Sentences: []string{"2 + 2 = 4"},
+				Title:     "Calculation Result",
+			}
+			close(ch)
+			return ch
+		},
+	}
+
+	mockBigModel := &testLLMClient{
+		model: "test-big-model",
+		toolCallsPerTurn: [][]api.ToolCall{
+			{
+				{
+					Function: api.ToolCallFunction{
+						Name:      "calculator",
+						Arguments: map[string]any{"expression": "2+2"},
+					},
+				},
+			},
+		},
+		responses: []string{"", "The answer is 4"},
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		Tools:     []MCPTool{mockTool},
+		MaxTokens: 1000,
+		MaxTurns:  3,
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "What is 2+2?",
+	}
+
+	// Execute
+	result, err := agent.Execute(context.Background(), reporter, req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "The answer is 4", result.Answer)
+	assert.GreaterOrEqual(t, result.ProcessingTime, int64(0))
+
+	// Check that events were sent
+	assert.GreaterOrEqual(t, reporter.GetEventCount(), 1)
+}
+
+func TestAgentExecuteMaxTurns(t *testing.T) {
+	// Setup model that always returns tool calls
+	mockBigModel := &testLLMClient{
+		model: "test-big-model",
+		toolCalls: []api.ToolCall{
+			{
+				Function: api.ToolCallFunction{
+					Name:      "endless-tool",
+					Arguments: map[string]any{},
+				},
+			},
+		},
+	}
+
+	mockTool := MCPTool{
+		Tool: api.Tool{
+			Function: api.ToolFunction{
+				Name: "endless-tool",
+			},
+		},
+		Handler: func(ctx context.Context, params api.ToolCallFunctionArguments) <-chan *schema.ToolResultChunk {
+			ch := make(chan *schema.ToolResultChunk, 1)
+			ch <- &schema.ToolResultChunk{
+				Sentences: []string{"Tool executed"},
+			}
+			close(ch)
+			return ch
+		},
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		Tools:     []MCPTool{mockTool},
+		MaxTokens: 1000,
+		MaxTurns:  2, // Low max turns to test limit
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "Test question",
+	}
+
+	// Execute
+	result, err := agent.Execute(context.Background(), reporter, req)
+
+	// Should still complete even if max turns reached
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 2, mockBigModel.callCount) // Should have called model maxTurns times
+}
+
+func TestAgentExecuteLLMError(t *testing.T) {
+	// Setup model that returns error
+	mockBigModel := &testLLMClient{
+		model:        "test-big-model",
+		shouldError:  true,
+		errorMessage: "LLM service unavailable",
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		MaxTokens: 1000,
+		MaxTurns:  3,
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "Test question",
+	}
+
+	// Execute
+	result, err := agent.Execute(context.Background(), reporter, req)
+
+	// Should return error
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "LLM service unavailable")
+}
+
+func TestAgentExecuteWithContext(t *testing.T) {
+	mockBigModel := &testLLMClient{
+		model:    "test-big-model",
+		response: "Answer based on context",
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		MaxTokens: 1000,
+		MaxTurns:  3,
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "Test question",
+		Context:  "This is additional context for the question",
+	}
+
+	// Execute
+	result, err := agent.Execute(context.Background(), reporter, req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "Answer based on context", result.Answer)
+}
+
+func TestAgentExecuteEmptyQuestion(t *testing.T) {
+	mockBigModel := &testLLMClient{
+		model:    "test-big-model",
+		response: "I need a question to answer",
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		MaxTokens: 1000,
+		MaxTurns:  3,
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "",
+	}
+
+	// Execute
+	result, err := agent.Execute(context.Background(), reporter, req)
+
+	// Should still work with empty question
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "I need a question to answer", result.Answer)
+}
+
+func TestAgentRunLLM(t *testing.T) {
+	mockBigModel := &testLLMClient{
+		model:    "test-model",
+		response: "Test response",
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		MaxTokens: 1000,
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	messages := []llm.Message{
+		{Role: "user", Content: "Test message"},
+	}
+
+	// Execute
+	inference, toolCalls, err := agent.RunLLM(context.Background(), messages, reporter)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, "Test response", inference)
+	assert.Empty(t, toolCalls)
+}
+
+func TestAgentRunLLMWithToolCalls(t *testing.T) {
+	expectedToolCalls := []api.ToolCall{
+		{
+			Function: api.ToolCallFunction{
+				Name:      "test-tool",
+				Arguments: map[string]any{"param": "value"},
+			},
+		},
+	}
+
+	mockBigModel := &testLLMClient{
+		model:     "test-model",
+		toolCalls: expectedToolCalls,
+	}
+
+	mockTool := MCPTool{
+		Tool: api.Tool{
+			Function: api.ToolFunction{
+				Name: "test-tool",
+			},
+		},
+	}
+
+	config := AgentConfig{
+		BigModel: mockBigModel,
+		Tools:    []MCPTool{mockTool},
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	messages := []llm.Message{
+		{Role: "user", Content: "Use test tool"},
+	}
+
+	// Execute
+	inference, toolCalls, err := agent.RunLLM(context.Background(), messages, reporter)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, "", inference) // Should be empty when tool calls are made
+	assert.Len(t, toolCalls, 1)
+	assert.Equal(t, "test-tool", toolCalls[0].Function.Name)
+}
+
+func TestAgentRunLLMError(t *testing.T) {
+	mockBigModel := &testLLMClient{
+		model:        "test-model",
+		shouldError:  true,
+		errorMessage: "Model error",
+	}
+
+	config := AgentConfig{
+		BigModel: mockBigModel,
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	messages := []llm.Message{
+		{Role: "user", Content: "Test message"},
+	}
+
+	// Execute
+	inference, toolCalls, err := agent.RunLLM(context.Background(), messages, reporter)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Empty(t, inference)
+	assert.Empty(t, toolCalls)
+	assert.Contains(t, err.Error(), "Model error")
+}
+
+func TestAgentExecuteNilReporter(t *testing.T) {
+	mockBigModel := &testLLMClient{
+		model:    "test-big-model",
+		response: "Test response",
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		MaxTokens: 1000,
+		MaxTurns:  3,
+	}
+
+	agent := NewAgent(config)
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "Test question",
+	}
+
+	// Execute with nil reporter (should cause panic or error)
+	assert.Panics(t, func() {
+		agent.Execute(context.Background(), nil, req)
+	})
+}
+
+func TestAgentExecuteCanceledContext(t *testing.T) {
+	mockBigModel := &testLLMClient{
+		model:    "test-big-model",
+		response: "Test response",
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		MaxTokens: 1000,
+		MaxTurns:  3,
+	}
+
+	agent := NewAgent(config)
+	reporter := &MockProgressReporter{}
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "Test question",
+	}
+
+	// Create canceled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Execute should respect context cancellation
+	// Note: This test might pass if the LLM call doesn't check context
+	// The behavior depends on the implementation
+	result, err := agent.Execute(ctx, reporter, req)
+
+	// The exact behavior depends on implementation, but it shouldn't panic
+	if err != nil {
+		assert.Contains(t, err.Error(), "context")
+	} else {
+		assert.NotNil(t, result)
+	}
+}
+
+// Benchmark tests
+func BenchmarkAgentExecute(b *testing.B) {
+	mockBigModel := &testLLMClient{
+		model:    "test-big-model",
+		response: "Benchmark response",
+	}
+
+	config := AgentConfig{
+		BigModel:  mockBigModel,
+		MaxTokens: 1000,
+		MaxTurns:  3,
+	}
+
+	agent := NewAgent(config)
+	reporter := &NoOpProgressReporter{}
+
+	req := &schema.GenerateAnswerRequest{
+		Question: "Benchmark question",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		mockBigModel.callCount = 0 // Reset for each iteration
+		result, err := agent.Execute(context.Background(), reporter, req)
+		if err != nil {
+			b.Fatal(err)
+		}
+		_ = result
+	}
+}
+
+func BenchmarkAgentRunLLM(b *testing.B) {
+	mockBigModel := &testLLMClient{
+		model:    "test-model",
+		response: "Benchmark response",
+	}
+
+	config := AgentConfig{
+		BigModel: mockBigModel,
+	}
+
+	agent := NewAgent(config)
+	reporter := &NoOpProgressReporter{}
+
+	messages := []llm.Message{
+		{Role: "user", Content: "Benchmark message"},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		inference, toolCalls, err := agent.RunLLM(context.Background(), messages, reporter)
+		if err != nil {
+			b.Fatal(err)
+		}
+		_ = inference
+		_ = toolCalls
+	}
+}

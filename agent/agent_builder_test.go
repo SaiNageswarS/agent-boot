@@ -65,19 +65,6 @@ func TestAgentBuilderAddTool(t *testing.T) {
 	assert.Equal(t, "tool2", builder.config.Tools[1].Function.Name)
 }
 
-func TestAgentBuilderWithPrompt(t *testing.T) {
-	builder := NewAgentBuilder()
-	prompt := PromptTemplate{
-		Name:     "test-prompt",
-		Template: "Test template",
-	}
-
-	result := builder.WithPrompt(prompt)
-
-	assert.Equal(t, builder, result) // Should return self for chaining
-	assert.Equal(t, prompt, builder.config.Prompt)
-}
-
 func TestAgentBuilderWithMaxTokens(t *testing.T) {
 	builder := NewAgentBuilder()
 
@@ -106,16 +93,12 @@ func TestAgentBuilderBuild(t *testing.T) {
 			},
 		},
 	}
-	prompt := PromptTemplate{
-		Name: "test-prompt",
-	}
 
 	builder := NewAgentBuilder()
 	agent := builder.
 		WithMiniModel(mockMiniModel).
 		WithBigModel(mockBigModel).
 		AddTool(tool).
-		WithPrompt(prompt).
 		WithMaxTokens(3000).
 		WithMaxTurns(7).
 		Build()
@@ -125,7 +108,6 @@ func TestAgentBuilderBuild(t *testing.T) {
 	assert.Equal(t, mockBigModel, agent.config.BigModel)
 	assert.Len(t, agent.config.Tools, 1)
 	assert.Equal(t, "test-tool", agent.config.Tools[0].Function.Name)
-	assert.Equal(t, prompt, agent.config.Prompt)
 	assert.Equal(t, 3000, agent.config.MaxTokens)
 	assert.Equal(t, 7, agent.config.MaxTurns)
 }
@@ -189,7 +171,6 @@ func TestAgentBuilderDefaultValues(t *testing.T) {
 	assert.Nil(t, agent.config.MiniModel)
 	assert.Nil(t, agent.config.BigModel)
 	assert.Empty(t, agent.config.Tools)
-	assert.Equal(t, PromptTemplate{}, agent.config.Prompt)
 }
 
 func TestAgentBuilderOverrideValues(t *testing.T) {
@@ -226,26 +207,6 @@ func TestAgentBuilderZeroValues(t *testing.T) {
 
 	assert.Equal(t, 0, agent.config.MaxTokens)
 	assert.Equal(t, 0, agent.config.MaxTurns)
-}
-
-func TestAgentBuilderComplexPromptTemplate(t *testing.T) {
-	builder := NewAgentBuilder()
-	complexPrompt := PromptTemplate{
-		Name:      "complex-prompt",
-		Template:  "Hello {{.User}}, your query: {{.Query}}",
-		Variables: []string{"User", "Query"},
-		Metadata: map[string]string{
-			"version": "1.0",
-			"author":  "test",
-		},
-	}
-
-	agent := builder.WithPrompt(complexPrompt).Build()
-
-	assert.Equal(t, complexPrompt, agent.config.Prompt)
-	assert.Equal(t, "complex-prompt", agent.config.Prompt.Name)
-	assert.Len(t, agent.config.Prompt.Variables, 2)
-	assert.Len(t, agent.config.Prompt.Metadata, 2)
 }
 
 // Benchmark tests

@@ -18,8 +18,8 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 	msgs := []llm.Message{
 		{Role: "user", Content: req.Question},
 	}
-	if req.Context != "" {
-		msgs = append([]llm.Message{{Role: "system", Content: req.Context}}, msgs...)
+	if a.config.SystemPrompt != "" {
+		msgs = append([]llm.Message{{Role: "system", Content: a.config.SystemPrompt}}, msgs...)
 	}
 
 	var inference string

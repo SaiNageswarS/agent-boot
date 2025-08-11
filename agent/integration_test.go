@@ -40,7 +40,7 @@ func TestAgentIntegration(t *testing.T) {
 	mockModel := &mockLLMClient{model: "integration-test"}
 
 	// 3. Create a tool using the MCP tool builder
-	tool := NewMCPTool("integration-tool", "Integration test tool").
+	tool := NewMCPToolBuilder("integration-tool", "Integration test tool").
 		StringParam("input", "Test input parameter", true).
 		Summarize(false).
 		WithHandler(func(ctx context.Context, params api.ToolCallFunctionArguments) <-chan *schema.ToolResultChunk {

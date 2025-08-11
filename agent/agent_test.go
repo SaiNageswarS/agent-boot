@@ -42,20 +42,6 @@ func (m *mockLLMClient) GetModel() string {
 	return m.model
 }
 
-func TestPromptTemplate(t *testing.T) {
-	template := PromptTemplate{
-		Name:      "test-template",
-		Template:  "Hello {{.Name}}",
-		Variables: []string{"Name"},
-		Metadata:  map[string]string{"version": "1.0"},
-	}
-
-	assert.Equal(t, "test-template", template.Name)
-	assert.Equal(t, "Hello {{.Name}}", template.Template)
-	assert.Equal(t, []string{"Name"}, template.Variables)
-	assert.Equal(t, "1.0", template.Metadata["version"])
-}
-
 func TestAgentConfig(t *testing.T) {
 	mockMiniModel := &mockLLMClient{model: "mini-model"}
 	mockBigModel := &mockLLMClient{model: "big-model"}
@@ -69,16 +55,10 @@ func TestAgentConfig(t *testing.T) {
 		},
 	}
 
-	prompt := PromptTemplate{
-		Name:     "test-prompt",
-		Template: "Test template",
-	}
-
 	config := AgentConfig{
 		MiniModel: mockMiniModel,
 		BigModel:  mockBigModel,
 		Tools:     []MCPTool{tool},
-		Prompt:    prompt,
 		MaxTokens: 1000,
 		MaxTurns:  3,
 	}
@@ -86,7 +66,6 @@ func TestAgentConfig(t *testing.T) {
 	assert.Equal(t, mockMiniModel, config.MiniModel)
 	assert.Equal(t, mockBigModel, config.BigModel)
 	assert.Len(t, config.Tools, 1)
-	assert.Equal(t, prompt, config.Prompt)
 	assert.Equal(t, 1000, config.MaxTokens)
 	assert.Equal(t, 3, config.MaxTurns)
 }
@@ -97,7 +76,10 @@ func TestNewAgent(t *testing.T) {
 		MaxTurns:  5,
 	}
 
-	agent := NewAgent(config)
+	agent := NewAgentBuilder().
+		WithMaxTokens(config.MaxTokens).
+		WithMaxTurns(config.MaxTurns).
+		Build()
 
 	assert.NotNil(t, agent)
 	assert.Equal(t, config, agent.config)
@@ -158,8 +140,7 @@ func TestMCPToolWithAPI(t *testing.T) {
 
 func TestAgentConfigValidation(t *testing.T) {
 	// Test empty config
-	emptyConfig := AgentConfig{}
-	agent := NewAgent(emptyConfig)
+	agent := Agent{}
 	assert.NotNil(t, agent)
 	assert.Equal(t, 0, agent.config.MaxTokens)
 	assert.Equal(t, 0, agent.config.MaxTurns)
@@ -171,38 +152,12 @@ func TestAgentConfigValidation(t *testing.T) {
 		MaxTokens: 1000,
 		MaxTurns:  3,
 	}
-	agentWithNilModels := NewAgent(configWithNilModels)
+	agentWithNilModels := Agent{
+		config: configWithNilModels,
+	}
 	assert.NotNil(t, agentWithNilModels)
 	assert.Nil(t, agentWithNilModels.config.MiniModel)
 	assert.Nil(t, agentWithNilModels.config.BigModel)
-}
-
-func TestPromptTemplateWithComplexMetadata(t *testing.T) {
-	metadata := map[string]string{
-		"version":     "2.1",
-		"author":      "test-author",
-		"description": "Complex template for testing",
-		"tags":        "test,agent,prompt",
-	}
-
-	template := PromptTemplate{
-		Name:      "complex-template",
-		Template:  "Complex template with {{.Variable1}} and {{.Variable2}}",
-		Variables: []string{"Variable1", "Variable2"},
-		Metadata:  metadata,
-	}
-
-	assert.Equal(t, "complex-template", template.Name)
-	assert.Contains(t, template.Template, "{{.Variable1}}")
-	assert.Contains(t, template.Template, "{{.Variable2}}")
-	assert.Len(t, template.Variables, 2)
-	assert.Equal(t, "Variable1", template.Variables[0])
-	assert.Equal(t, "Variable2", template.Variables[1])
-	assert.Len(t, template.Metadata, 4)
-	assert.Equal(t, "2.1", template.Metadata["version"])
-	assert.Equal(t, "test-author", template.Metadata["author"])
-	assert.Equal(t, "Complex template for testing", template.Metadata["description"])
-	assert.Equal(t, "test,agent,prompt", template.Metadata["tags"])
 }
 
 func TestMCPToolDefaults(t *testing.T) {
@@ -223,7 +178,9 @@ func BenchmarkNewAgent(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		agent := NewAgent(config)
+		agent := Agent{
+			config: config,
+		}
 		_ = agent // Use the result to prevent optimization
 	}
 }

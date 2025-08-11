@@ -111,18 +111,17 @@ func TestAgentExecute(t *testing.T) {
 		response: "This is the final answer",
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		MaxTokens: 1000,
-		MaxTurns:  3,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithSystemPrompt("You are a helpful agent to solve math problem").
+		WithMaxTokens(1000).
+		WithMaxTurns(3).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	req := &schema.GenerateAnswerRequest{
 		Question: "What is 2+2?",
-		Context:  "Solve this math problem",
 	}
 
 	// Execute
@@ -182,14 +181,13 @@ func TestAgentExecuteWithTools(t *testing.T) {
 		responses: []string{"", "The answer is 4"},
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		Tools:     []MCPTool{mockTool},
-		MaxTokens: 1000,
-		MaxTurns:  3,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithMaxTokens(1000).
+		WithMaxTurns(3).
+		AddTool(mockTool).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	req := &schema.GenerateAnswerRequest{
@@ -239,14 +237,13 @@ func TestAgentExecuteMaxTurns(t *testing.T) {
 		},
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		Tools:     []MCPTool{mockTool},
-		MaxTokens: 1000,
-		MaxTurns:  2, // Low max turns to test limit
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithMaxTokens(1000).
+		WithMaxTurns(2).
+		AddTool(mockTool).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	req := &schema.GenerateAnswerRequest{
@@ -270,13 +267,12 @@ func TestAgentExecuteLLMError(t *testing.T) {
 		errorMessage: "LLM service unavailable",
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		MaxTokens: 1000,
-		MaxTurns:  3,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithMaxTokens(1000).
+		WithMaxTurns(3).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	req := &schema.GenerateAnswerRequest{
@@ -298,18 +294,17 @@ func TestAgentExecuteWithContext(t *testing.T) {
 		response: "Answer based on context",
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		MaxTokens: 1000,
-		MaxTurns:  3,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithSystemPrompt("Test context").
+		WithMaxTokens(1000).
+		WithMaxTurns(3).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	req := &schema.GenerateAnswerRequest{
 		Question: "Test question",
-		Context:  "This is additional context for the question",
 	}
 
 	// Execute
@@ -327,13 +322,12 @@ func TestAgentExecuteEmptyQuestion(t *testing.T) {
 		response: "I need a question to answer",
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		MaxTokens: 1000,
-		MaxTurns:  3,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithMaxTokens(1000).
+		WithMaxTurns(3).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	req := &schema.GenerateAnswerRequest{
@@ -355,12 +349,11 @@ func TestAgentRunLLM(t *testing.T) {
 		response: "Test response",
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		MaxTokens: 1000,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithMaxTokens(1000).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	messages := []llm.Message{
@@ -399,12 +392,11 @@ func TestAgentRunLLMWithToolCalls(t *testing.T) {
 		},
 	}
 
-	config := AgentConfig{
-		BigModel: mockBigModel,
-		Tools:    []MCPTool{mockTool},
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		AddTool(mockTool).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	messages := []llm.Message{
@@ -428,11 +420,10 @@ func TestAgentRunLLMError(t *testing.T) {
 		errorMessage: "Model error",
 	}
 
-	config := AgentConfig{
-		BigModel: mockBigModel,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	messages := []llm.Message{
@@ -455,13 +446,11 @@ func TestAgentExecuteNilReporter(t *testing.T) {
 		response: "Test response",
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		MaxTokens: 1000,
-		MaxTurns:  3,
-	}
-
-	agent := NewAgent(config)
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithMaxTokens(1000).
+		WithMaxTurns(3).
+		Build()
 
 	req := &schema.GenerateAnswerRequest{
 		Question: "Test question",
@@ -479,13 +468,12 @@ func TestAgentExecuteCanceledContext(t *testing.T) {
 		response: "Test response",
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		MaxTokens: 1000,
-		MaxTurns:  3,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithMaxTokens(1000).
+		WithMaxTurns(3).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &MockProgressReporter{}
 
 	req := &schema.GenerateAnswerRequest{
@@ -516,13 +504,12 @@ func BenchmarkAgentExecute(b *testing.B) {
 		response: "Benchmark response",
 	}
 
-	config := AgentConfig{
-		BigModel:  mockBigModel,
-		MaxTokens: 1000,
-		MaxTurns:  3,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		WithMaxTokens(1000).
+		WithMaxTurns(3).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &NoOpProgressReporter{}
 
 	req := &schema.GenerateAnswerRequest{
@@ -546,11 +533,10 @@ func BenchmarkAgentRunLLM(b *testing.B) {
 		response: "Benchmark response",
 	}
 
-	config := AgentConfig{
-		BigModel: mockBigModel,
-	}
+	agent := NewAgentBuilder().
+		WithBigModel(mockBigModel).
+		Build()
 
-	agent := NewAgent(config)
 	reporter := &NoOpProgressReporter{}
 
 	messages := []llm.Message{

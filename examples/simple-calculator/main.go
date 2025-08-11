@@ -17,7 +17,7 @@ func main() {
 	llmClient := llm.NewOllamaClient("gpt-oss:20b")
 
 	// Create a simple calculator tool
-	calculatorTool := agent.NewMCPTool("calculator", "Performs basic mathematical calculations").
+	calculatorTool := agent.NewMCPToolBuilder("calculator", "Performs basic mathematical calculations").
 		StringParam("expression", "Mathematical expression to evaluate (e.g., '2+2', '10*5')", true).
 		WithHandler(calculatorHandler).
 		Build()
@@ -26,6 +26,7 @@ func main() {
 	agentInstance := agent.NewAgentBuilder().
 		WithBigModel(llmClient).
 		WithMiniModel(llmClient).
+		WithSystemPrompt("You are a helpful calculator agent. Solve the math problems step by step.").
 		AddTool(calculatorTool).
 		WithMaxTokens(2000).
 		WithMaxTurns(5).
@@ -38,7 +39,6 @@ func main() {
 	ctx := context.Background()
 	request := &schema.GenerateAnswerRequest{
 		Question: "What is 15 multiplied by 23, and then add 7 to the result?",
-		Context:  "Please solve this math problem step by step using the calculator tool.",
 	}
 
 	fmt.Println("🤖 Starting calculation...")

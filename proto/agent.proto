@@ -10,7 +10,6 @@ service Agent {
 
 message GenerateAnswerRequest {
     string question = 1;
-    string context = 2;
     int32 maxIterations = 3;
     map<string, string> metadata = 4;
 }

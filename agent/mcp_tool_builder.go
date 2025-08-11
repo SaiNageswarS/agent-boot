@@ -14,7 +14,7 @@ type MCPToolBuilder struct {
 	tool MCPTool
 }
 
-func NewMCPTool(name, description string) *MCPToolBuilder {
+func NewMCPToolBuilder(name, description string) *MCPToolBuilder {
 	b := &MCPToolBuilder{
 		tool: MCPTool{
 			Tool: api.Tool{

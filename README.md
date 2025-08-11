@@ -60,6 +60,7 @@ func main() {
     agent := agent.NewAgentBuilder().
         WithBigModel(llmClient).
         WithMiniModel(llmClient).
+        WithSystemPrompt("You are a helpful calculator agent. Solve the math problems step by step.").
         AddTool(calculatorTool).
         WithMaxTokens(2000).
         WithMaxTurns(5).
@@ -71,7 +72,6 @@ func main() {
     
     request := &schema.GenerateAnswerRequest{
         Question: "What is 15 * 23 + 7?",
-        Context:  "Please solve this math problem step by step.",
     }
 
     response, err := agent.Execute(ctx, reporter, request)

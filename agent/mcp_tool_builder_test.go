@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewMCPTool(t *testing.T) {
-	builder := NewMCPTool("test-tool", "A test tool for testing")
+	builder := NewMCPToolBuilder("test-tool", "A test tool for testing")
 
 	assert.NotNil(t, builder)
 	assert.Equal(t, "function", builder.tool.Tool.Type)
@@ -23,7 +23,7 @@ func TestNewMCPTool(t *testing.T) {
 }
 
 func TestMCPToolBuilderStringParam(t *testing.T) {
-	builder := NewMCPTool("test", "test")
+	builder := NewMCPToolBuilder("test", "test")
 
 	result := builder.StringParam("name", "The name parameter", true)
 
@@ -37,7 +37,7 @@ func TestMCPToolBuilderStringParam(t *testing.T) {
 }
 
 func TestMCPToolBuilderStringParamOptional(t *testing.T) {
-	builder := NewMCPTool("test", "test")
+	builder := NewMCPToolBuilder("test", "test")
 
 	builder.StringParam("optional", "Optional parameter", false)
 
@@ -49,7 +49,7 @@ func TestMCPToolBuilderStringParamOptional(t *testing.T) {
 }
 
 func TestMCPToolBuilderStringSliceParam(t *testing.T) {
-	builder := NewMCPTool("test", "test")
+	builder := NewMCPToolBuilder("test", "test")
 
 	result := builder.StringSliceParam("tags", "List of tags", true)
 
@@ -64,7 +64,7 @@ func TestMCPToolBuilderStringSliceParam(t *testing.T) {
 }
 
 func TestMCPToolBuilderSummarize(t *testing.T) {
-	builder := NewMCPTool("test", "test")
+	builder := NewMCPToolBuilder("test", "test")
 
 	result := builder.Summarize(true)
 
@@ -77,7 +77,7 @@ func TestMCPToolBuilderSummarize(t *testing.T) {
 }
 
 func TestMCPToolBuilderWithHandler(t *testing.T) {
-	builder := NewMCPTool("test", "test")
+	builder := NewMCPToolBuilder("test", "test")
 	handlerCalled := false
 
 	handler := func(ctx context.Context, params api.ToolCallFunctionArguments) <-chan *schema.ToolResultChunk {
@@ -105,7 +105,7 @@ func TestMCPToolBuilderBuild(t *testing.T) {
 		return ch
 	}
 
-	builder := NewMCPTool("calculator", "Performs mathematical calculations")
+	builder := NewMCPToolBuilder("calculator", "Performs mathematical calculations")
 	tool := builder.
 		StringParam("expression", "Mathematical expression to evaluate", true).
 		StringParam("format", "Output format", false).
@@ -132,7 +132,7 @@ func TestMCPToolBuilderBuild(t *testing.T) {
 }
 
 func TestMCPToolBuilderMultipleRequired(t *testing.T) {
-	builder := NewMCPTool("test", "test")
+	builder := NewMCPToolBuilder("test", "test")
 
 	builder.
 		StringParam("param1", "First required param", true).
@@ -148,7 +148,7 @@ func TestMCPToolBuilderMultipleRequired(t *testing.T) {
 }
 
 func TestMCPToolBuilderDuplicateRequired(t *testing.T) {
-	builder := NewMCPTool("test", "test")
+	builder := NewMCPToolBuilder("test", "test")
 
 	// Add the same parameter multiple times as required
 	builder.
@@ -339,7 +339,7 @@ func TestNewMathToolResultEmptySteps(t *testing.T) {
 func BenchmarkNewMCPTool(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		builder := NewMCPTool("test", "test description")
+		builder := NewMCPToolBuilder("test", "test description")
 		_ = builder
 	}
 }
@@ -353,7 +353,7 @@ func BenchmarkMCPToolBuilderBuild(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		builder := NewMCPTool("test", "test")
+		builder := NewMCPToolBuilder("test", "test")
 		tool := builder.
 			StringParam("param1", "desc1", true).
 			StringParam("param2", "desc2", false).

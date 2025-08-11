@@ -95,7 +95,6 @@ func (Stage) EnumDescriptor() ([]byte, []int) {
 type GenerateAnswerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Question      string                 `protobuf:"bytes,1,opt,name=question,proto3" json:"question,omitempty"`
-	Context       string                 `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
 	MaxIterations int32                  `protobuf:"varint,3,opt,name=maxIterations,proto3" json:"maxIterations,omitempty"`
 	Metadata      map[string]string      `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
@@ -135,13 +134,6 @@ func (*GenerateAnswerRequest) Descriptor() ([]byte, []int) {
 func (x *GenerateAnswerRequest) GetQuestion() string {
 	if x != nil {
 		return x.Question
-	}
-	return ""
-}
-
-func (x *GenerateAnswerRequest) GetContext() string {
-	if x != nil {
-		return x.Context
 	}
 	return ""
 }
@@ -631,10 +623,9 @@ var File_agent_proto protoreflect.FileDescriptor
 
 const file_agent_proto_rawDesc = "" +
 	"\n" +
-	"\vagent.proto\x12\x05agent\"\xf8\x01\n" +
+	"\vagent.proto\x12\x05agent\"\xde\x01\n" +
 	"\x15GenerateAnswerRequest\x12\x1a\n" +
-	"\bquestion\x18\x01 \x01(\tR\bquestion\x12\x18\n" +
-	"\acontext\x18\x02 \x01(\tR\acontext\x12$\n" +
+	"\bquestion\x18\x01 \x01(\tR\bquestion\x12$\n" +
 	"\rmaxIterations\x18\x03 \x01(\x05R\rmaxIterations\x12F\n" +
 	"\bmetadata\x18\x04 \x03(\v2*.agent.GenerateAnswerRequest.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +

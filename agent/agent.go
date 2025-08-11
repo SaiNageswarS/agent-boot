@@ -8,34 +8,19 @@ import (
 	"github.com/ollama/ollama/api"
 )
 
-// PromptTemplate represents a reusable prompt template
-type PromptTemplate struct {
-	Name      string            `json:"name"`
-	Template  string            `json:"template"`
-	Variables []string          `json:"variables"`
-	Metadata  map[string]string `json:"metadata"`
-}
-
 // AgentConfig holds configuration for the agent
 type AgentConfig struct {
-	MiniModel llm.LLMClient
-	BigModel  llm.LLMClient
-	Tools     []MCPTool
-	Prompt    PromptTemplate
-	MaxTokens int
-	MaxTurns  int
+	MiniModel    llm.LLMClient
+	BigModel     llm.LLMClient
+	SystemPrompt string
+	Tools        []MCPTool
+	MaxTokens    int
+	MaxTurns     int
 }
 
 // Agent represents the main agent system
 type Agent struct {
 	config AgentConfig
-}
-
-// NewAgent creates a new agent instance
-func NewAgent(config AgentConfig) *Agent {
-	return &Agent{
-		config: config,
-	}
 }
 
 // MCPTool wraps an api.Tool and provides a handler for execution

@@ -25,13 +25,13 @@ func (b *AgentBuilder) WithBigModel(client llm.LLMClient) *AgentBuilder {
 	return b
 }
 
-func (b *AgentBuilder) AddTool(tool MCPTool) *AgentBuilder {
-	b.config.Tools = append(b.config.Tools, tool)
+func (b *AgentBuilder) WithSystemPrompt(prompt string) *AgentBuilder {
+	b.config.SystemPrompt = prompt
 	return b
 }
 
-func (b *AgentBuilder) WithPrompt(prompt PromptTemplate) *AgentBuilder {
-	b.config.Prompt = prompt
+func (b *AgentBuilder) AddTool(tool MCPTool) *AgentBuilder {
+	b.config.Tools = append(b.config.Tools, tool)
 	return b
 }
 

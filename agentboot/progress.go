@@ -1,4 +1,4 @@
-package agent
+package agentboot
 
 import (
 	"time"
@@ -24,11 +24,11 @@ func (r *NoOpProgressReporter) Send(event *schema.AgentStreamChunk) error {
 
 // GrpcProgressReporter implements ProgressReporter for gRPC streaming
 type GrpcProgressReporter struct {
-	stream grpc.ServerStreamingServer[schema.AgentStreamChunk]
+	Stream grpc.ServerStreamingServer[schema.AgentStreamChunk]
 }
 
 func (r *GrpcProgressReporter) Send(event *schema.AgentStreamChunk) error {
-	return r.stream.Send(event)
+	return r.Stream.Send(event)
 }
 
 // Helper functions for creating progress events

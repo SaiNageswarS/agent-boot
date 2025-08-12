@@ -42,7 +42,7 @@ import (
     "fmt"
     "log"
 
-    "github.com/SaiNageswarS/agent-boot/agent"
+    "github.com/SaiNageswarS/agent-boot/agentboot"
     "github.com/SaiNageswarS/agent-boot/llm"
     "github.com/SaiNageswarS/agent-boot/schema"
 )
@@ -52,12 +52,12 @@ func main() {
     llmClient := llm.NewOllamaClient("gpt-oss:20b")
 
     // Build an agent with tools
-    calculatorTool := agent.NewMCPTool("calculator", "Performs mathematical calculations").
+    calculatorTool := agentboot.NewMCPTool("calculator", "Performs mathematical calculations").
         StringParam("expression", "Mathematical expression to evaluate", true).
         WithHandler(calculatorHandler).
         Build()
 
-    agent := agent.NewAgentBuilder().
+    agent := agentboot.NewAgentBuilder().
         WithBigModel(llmClient).
         WithMiniModel(llmClient).
         WithSystemPrompt("You are a helpful calculator agent. Solve the math problems step by step.").
@@ -195,14 +195,14 @@ import (
     "context"
     "net"
 
-    "github.com/SaiNageswarS/agent-boot/agent"
+    "github.com/SaiNageswarS/agent-boot/agentboot"
     "github.com/SaiNageswarS/agent-boot/schema"
     "google.golang.org/grpc"
 )
 
 type AgentService struct {
     schema.UnimplementedAgentServer
-    agent *agent.Agent
+    agent *agentboot.Agent
 }
 
 func (s *AgentService) Execute(
@@ -210,7 +210,7 @@ func (s *AgentService) Execute(
     stream schema.Agent_ExecuteServer,
 ) error {
     ctx := stream.Context()
-    reporter := &agent.GrpcProgressReporter{Stream: stream}
+    reporter := &agentboot.GrpcProgressReporter{Stream: stream}
     
     _, err := s.agent.Execute(ctx, reporter, req)
     return err
@@ -244,7 +244,7 @@ func main() {
 bigModel := llm.NewAnthropicClient("claude-3-5-sonnet-20241022")    // For complex reasoning
 miniModel := llm.NewOllamaClient("llama3.2:3b")                     // For summarization
 
-agent := agent.NewAgentBuilder().
+agent := agentboot.NewAgentBuilder().
     WithBigModel(bigModel).      // Used for main inference
     WithMiniModel(miniModel).    // Used for summarization
     AddTool(complexAnalysisTool).
@@ -308,7 +308,7 @@ Template system for:
 
 ```go
 // Define your tool
-weatherTool := agent.NewMCPTool("get_weather", "Gets current weather information").
+weatherTool := agentboot.NewMCPTool("get_weather", "Gets current weather information").
     StringParam("location", "City or location name", true).
     StringParam("units", "Temperature units (celsius/fahrenheit)", false).
     Summarize(false).
@@ -334,7 +334,7 @@ weatherTool := agent.NewMCPTool("get_weather", "Gets current weather information
                 return
             }
             
-            chunk := agent.NewToolResultChunk().
+            chunk := agentboot.NewToolResultChunk().
                 Title(fmt.Sprintf("Weather in %s", location)).
                 Sentences(
                     fmt.Sprintf("Temperature: %d°%s", weather.Temperature, strings.ToUpper(units[:1])),
@@ -358,13 +358,13 @@ weatherTool := agent.NewMCPTool("get_weather", "Gets current weather information
 
 ```go
 // Mathematical calculations
-result := agent.NewMathToolResult("2 + 2", "4", []string{
+result := agentboot.NewMathToolResult("2 + 2", "4", []string{
     "Step 1: Add 2 + 2",
     "Step 2: Result is 4",
 })
 
 // Generic results
-result := agent.NewToolResultChunk().
+result := agentboot.NewToolResultChunk().
     Title("Analysis Complete").
     Sentences("The analysis has been completed successfully.").
     Attribution("Analysis Engine").
@@ -450,7 +450,7 @@ export LOG_LEVEL="info"
 ### Agent Configuration
 
 ```go
-agent := agent.NewAgentBuilder().
+agent := agentboot.NewAgentBuilder().
     WithBigModel(primaryModel).
     WithMiniModel(summarizationModel).
     WithMaxTokens(4000).          // Maximum tokens per request

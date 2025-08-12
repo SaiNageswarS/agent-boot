@@ -1,4 +1,4 @@
-package agent
+package agentboot
 
 import "github.com/SaiNageswarS/agent-boot/llm"
 

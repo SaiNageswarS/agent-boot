@@ -6,7 +6,7 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/SaiNageswarS/agent-boot/agent"
+	"github.com/SaiNageswarS/agent-boot/agentboot"
 	"github.com/SaiNageswarS/agent-boot/llm"
 	"github.com/SaiNageswarS/agent-boot/schema"
 	"github.com/ollama/ollama/api"
@@ -17,13 +17,13 @@ func main() {
 	llmClient := llm.NewOllamaClient("gpt-oss:20b")
 
 	// Create a simple calculator tool
-	calculatorTool := agent.NewMCPToolBuilder("calculator", "Performs basic mathematical calculations").
+	calculatorTool := agentboot.NewMCPToolBuilder("calculator", "Performs basic mathematical calculations").
 		StringParam("expression", "Mathematical expression to evaluate (e.g., '2+2', '10*5')", true).
 		WithHandler(calculatorHandler).
 		Build()
 
 	// Build the agent
-	agentInstance := agent.NewAgentBuilder().
+	agentInstance := agentboot.NewAgentBuilder().
 		WithBigModel(llmClient).
 		WithMiniModel(llmClient).
 		WithSystemPrompt("You are a helpful calculator agent. Solve the math problems step by step.").
@@ -61,7 +61,7 @@ func calculatorHandler(ctx context.Context, params api.ToolCallFunctionArguments
 
 		expression, ok := params["expression"].(string)
 		if !ok {
-			chunk := agent.NewToolResultChunk().
+			chunk := agentboot.NewToolResultChunk().
 				Error("Invalid expression parameter").
 				Build()
 			ch <- chunk
@@ -71,7 +71,7 @@ func calculatorHandler(ctx context.Context, params api.ToolCallFunctionArguments
 		// Simple calculator implementation (you would use a proper math parser in production)
 		result, err := evaluateExpression(expression)
 		if err != nil {
-			chunk := agent.NewToolResultChunk().
+			chunk := agentboot.NewToolResultChunk().
 				Error(fmt.Sprintf("Calculation error: %v", err)).
 				Build()
 			ch <- chunk
@@ -79,7 +79,7 @@ func calculatorHandler(ctx context.Context, params api.ToolCallFunctionArguments
 		}
 
 		// Create a successful result chunk
-		chunk := agent.NewMathToolResult(expression, result, []string{
+		chunk := agentboot.NewMathToolResult(expression, result, []string{
 			fmt.Sprintf("Evaluating: %s", expression),
 			fmt.Sprintf("Result: %s", result),
 		})

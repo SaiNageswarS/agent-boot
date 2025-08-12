@@ -129,13 +129,9 @@ func TestNewStreamError(t *testing.T) {
 
 func TestProgressUpdateWithDifferentStages(t *testing.T) {
 	stages := []schema.Stage{
-		schema.Stage_tool_selection_starting,
-		schema.Stage_tool_selection_completed,
-		schema.Stage_tool_selection_failed,
 		schema.Stage_tool_execution_starting,
 		schema.Stage_tool_execution_failed,
 		schema.Stage_tool_execution_completed,
-		schema.Stage_tool_results_available,
 		schema.Stage_answer_generation_starting,
 		schema.Stage_answer_generation_failed,
 		schema.Stage_answer_generation_completed,

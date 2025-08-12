@@ -26,16 +26,12 @@ message AgentStreamChunk {
 
 // Progress / metadata updates
 enum Stage {
-    tool_selection_starting = 0;
-    tool_selection_completed = 1;
-    tool_selection_failed = 2;
-    tool_execution_starting = 3;
-    tool_execution_failed = 4;
-    tool_execution_completed = 5;
-    tool_results_available = 6;
-    answer_generation_starting = 7;
-    answer_generation_failed = 8;
-    answer_generation_completed = 9;
+    tool_execution_starting = 0;
+    tool_execution_failed = 1;
+    tool_execution_completed = 2;
+    answer_generation_starting = 3;
+    answer_generation_failed = 4;
+    answer_generation_completed = 5;
 }
 
 message ProgressUpdateChunk {
@@ -54,6 +50,7 @@ message ToolResultChunk {
     map<string, string> metadata = 4;
     string toolName = 5;
     string error = 6;
+    string id = 7;
 }
 
 // Final Answer Chunk

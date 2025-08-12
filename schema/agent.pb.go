@@ -25,43 +25,31 @@ const (
 type Stage int32
 
 const (
-	Stage_tool_selection_starting     Stage = 0
-	Stage_tool_selection_completed    Stage = 1
-	Stage_tool_selection_failed       Stage = 2
-	Stage_tool_execution_starting     Stage = 3
-	Stage_tool_execution_failed       Stage = 4
-	Stage_tool_execution_completed    Stage = 5
-	Stage_tool_results_available      Stage = 6
-	Stage_answer_generation_starting  Stage = 7
-	Stage_answer_generation_failed    Stage = 8
-	Stage_answer_generation_completed Stage = 9
+	Stage_tool_execution_starting     Stage = 0
+	Stage_tool_execution_failed       Stage = 1
+	Stage_tool_execution_completed    Stage = 2
+	Stage_answer_generation_starting  Stage = 3
+	Stage_answer_generation_failed    Stage = 4
+	Stage_answer_generation_completed Stage = 5
 )
 
 // Enum value maps for Stage.
 var (
 	Stage_name = map[int32]string{
-		0: "tool_selection_starting",
-		1: "tool_selection_completed",
-		2: "tool_selection_failed",
-		3: "tool_execution_starting",
-		4: "tool_execution_failed",
-		5: "tool_execution_completed",
-		6: "tool_results_available",
-		7: "answer_generation_starting",
-		8: "answer_generation_failed",
-		9: "answer_generation_completed",
+		0: "tool_execution_starting",
+		1: "tool_execution_failed",
+		2: "tool_execution_completed",
+		3: "answer_generation_starting",
+		4: "answer_generation_failed",
+		5: "answer_generation_completed",
 	}
 	Stage_value = map[string]int32{
-		"tool_selection_starting":     0,
-		"tool_selection_completed":    1,
-		"tool_selection_failed":       2,
-		"tool_execution_starting":     3,
-		"tool_execution_failed":       4,
-		"tool_execution_completed":    5,
-		"tool_results_available":      6,
-		"answer_generation_starting":  7,
-		"answer_generation_failed":    8,
-		"answer_generation_completed": 9,
+		"tool_execution_starting":     0,
+		"tool_execution_failed":       1,
+		"tool_execution_completed":    2,
+		"answer_generation_starting":  3,
+		"answer_generation_failed":    4,
+		"answer_generation_completed": 5,
 	}
 )
 
@@ -326,7 +314,7 @@ func (x *ProgressUpdateChunk) GetStage() Stage {
 	if x != nil {
 		return x.Stage
 	}
-	return Stage_tool_selection_starting
+	return Stage_tool_execution_starting
 }
 
 func (x *ProgressUpdateChunk) GetTimestamp() int64 {
@@ -360,6 +348,7 @@ type ToolResultChunk struct {
 	Metadata      map[string]string      `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ToolName      string                 `protobuf:"bytes,5,opt,name=toolName,proto3" json:"toolName,omitempty"`
 	Error         string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	Id            string                 `protobuf:"bytes,7,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -432,6 +421,13 @@ func (x *ToolResultChunk) GetToolName() string {
 func (x *ToolResultChunk) GetError() string {
 	if x != nil {
 		return x.Error
+	}
+	return ""
+}
+
+func (x *ToolResultChunk) GetId() string {
+	if x != nil {
+		return x.Id
 	}
 	return ""
 }
@@ -643,14 +639,15 @@ const file_agent_proto_rawDesc = "" +
 	"\x05stage\x18\x01 \x01(\x0e2\f.agent.StageR\x05stage\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12&\n" +
-	"\x0eestimatedSteps\x18\x05 \x01(\x05R\x0eestimatedSteps\"\x98\x02\n" +
+	"\x0eestimatedSteps\x18\x05 \x01(\x05R\x0eestimatedSteps\"\xa8\x02\n" +
 	"\x0fToolResultChunk\x12\x1c\n" +
 	"\tsentences\x18\x01 \x03(\tR\tsentences\x12 \n" +
 	"\vattribution\x18\x02 \x01(\tR\vattribution\x12\x14\n" +
 	"\x05title\x18\x03 \x01(\tR\x05title\x12@\n" +
 	"\bmetadata\x18\x04 \x03(\v2$.agent.ToolResultChunk.MetadataEntryR\bmetadata\x12\x1a\n" +
 	"\btoolName\x18\x05 \x01(\tR\btoolName\x12\x14\n" +
-	"\x05error\x18\x06 \x01(\tR\x05error\x1a;\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\x12\x0e\n" +
+	"\x02id\x18\a \x01(\tR\x02id\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"'\n" +
@@ -669,18 +666,14 @@ const file_agent_proto_rawDesc = "" +
 	"\vStreamError\x12#\n" +
 	"\rerror_message\x18\x01 \x01(\tR\ferrorMessage\x12\x1d\n" +
 	"\n" +
-	"error_code\x18\x02 \x01(\tR\terrorCode*\xae\x02\n" +
+	"error_code\x18\x02 \x01(\tR\terrorCode*\xbc\x01\n" +
 	"\x05Stage\x12\x1b\n" +
-	"\x17tool_selection_starting\x10\x00\x12\x1c\n" +
-	"\x18tool_selection_completed\x10\x01\x12\x19\n" +
-	"\x15tool_selection_failed\x10\x02\x12\x1b\n" +
-	"\x17tool_execution_starting\x10\x03\x12\x19\n" +
-	"\x15tool_execution_failed\x10\x04\x12\x1c\n" +
-	"\x18tool_execution_completed\x10\x05\x12\x1a\n" +
-	"\x16tool_results_available\x10\x06\x12\x1e\n" +
-	"\x1aanswer_generation_starting\x10\a\x12\x1c\n" +
-	"\x18answer_generation_failed\x10\b\x12\x1f\n" +
-	"\x1banswer_generation_completed\x10\t2M\n" +
+	"\x17tool_execution_starting\x10\x00\x12\x19\n" +
+	"\x15tool_execution_failed\x10\x01\x12\x1c\n" +
+	"\x18tool_execution_completed\x10\x02\x12\x1e\n" +
+	"\x1aanswer_generation_starting\x10\x03\x12\x1c\n" +
+	"\x18answer_generation_failed\x10\x04\x12\x1f\n" +
+	"\x1banswer_generation_completed\x10\x052M\n" +
 	"\x05Agent\x12D\n" +
 	"\aExecute\x12\x1c.agent.GenerateAnswerRequest\x1a\x17.agent.AgentStreamChunk\"\x000\x01B+Z)github.com/SaiNageswarS/agent-boot/schemab\x06proto3"
 

@@ -343,33 +343,7 @@ func TestAgentExecuteEmptyQuestion(t *testing.T) {
 	assert.Equal(t, "I need a question to answer", result.Answer)
 }
 
-func TestAgentRunLLM(t *testing.T) {
-	mockBigModel := &testLLMClient{
-		model:    "test-model",
-		response: "Test response",
-	}
-
-	agent := NewAgentBuilder().
-		WithBigModel(mockBigModel).
-		WithMaxTokens(1000).
-		Build()
-
-	reporter := &MockProgressReporter{}
-
-	messages := []llm.Message{
-		{Role: "user", Content: "Test message"},
-	}
-
-	// Execute
-	inference, toolCalls, err := agent.RunLLM(context.Background(), messages, reporter)
-
-	// Assert
-	assert.NoError(t, err)
-	assert.Equal(t, "Test response", inference)
-	assert.Empty(t, toolCalls)
-}
-
-func TestAgentRunLLMWithToolCalls(t *testing.T) {
+func TestAgentSelectTools(t *testing.T) {
 	expectedToolCalls := []api.ToolCall{
 		{
 			Function: api.ToolCallFunction{
@@ -404,16 +378,14 @@ func TestAgentRunLLMWithToolCalls(t *testing.T) {
 	}
 
 	// Execute
-	inference, toolCalls, err := agent.RunLLM(context.Background(), messages, reporter)
+	toolCalls := agent.SelectTools(context.Background(), reporter, messages)
 
 	// Assert
-	assert.NoError(t, err)
-	assert.Equal(t, "", inference) // Should be empty when tool calls are made
 	assert.Len(t, toolCalls, 1)
 	assert.Equal(t, "test-tool", toolCalls[0].Function.Name)
 }
 
-func TestAgentRunLLMError(t *testing.T) {
+func TestAgentSelectToolsError(t *testing.T) {
 	mockBigModel := &testLLMClient{
 		model:        "test-model",
 		shouldError:  true,
@@ -431,13 +403,10 @@ func TestAgentRunLLMError(t *testing.T) {
 	}
 
 	// Execute
-	inference, toolCalls, err := agent.RunLLM(context.Background(), messages, reporter)
+	toolCalls := agent.SelectTools(context.Background(), reporter, messages)
 
 	// Assert
-	assert.Error(t, err)
-	assert.Empty(t, inference)
 	assert.Empty(t, toolCalls)
-	assert.Contains(t, err.Error(), "Model error")
 }
 
 func TestAgentExecuteNilReporter(t *testing.T) {
@@ -524,32 +493,5 @@ func BenchmarkAgentExecute(b *testing.B) {
 			b.Fatal(err)
 		}
 		_ = result
-	}
-}
-
-func BenchmarkAgentRunLLM(b *testing.B) {
-	mockBigModel := &testLLMClient{
-		model:    "test-model",
-		response: "Benchmark response",
-	}
-
-	agent := NewAgentBuilder().
-		WithBigModel(mockBigModel).
-		Build()
-
-	reporter := &NoOpProgressReporter{}
-
-	messages := []llm.Message{
-		{Role: "user", Content: "Benchmark message"},
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		inference, toolCalls, err := agent.RunLLM(context.Background(), messages, reporter)
-		if err != nil {
-			b.Fatal(err)
-		}
-		_ = inference
-		_ = toolCalls
 	}
 }

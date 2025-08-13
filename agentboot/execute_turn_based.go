@@ -6,7 +6,9 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/llm"
 	"github.com/SaiNageswarS/agent-boot/schema"
+	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/ollama/ollama/api"
+	"go.uber.org/zap"
 )
 
 // ExecuteTurnBased executes the agent using turn-based mode with support for native tool calling
@@ -22,56 +24,52 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 		msgs = append([]llm.Message{{Role: "system", Content: a.config.SystemPrompt}}, msgs...)
 	}
 
-	var inference string
-	var toolCalls []api.ToolCall
-	var err error
-
-	for turns := 0; turns < a.config.MaxTurns; turns++ {
-		inference, toolCalls, err = a.RunLLM(ctx, msgs, reporter)
+	// Step 1: Select tools using gpt-oss
+	toolCalls := a.SelectTools(ctx, reporter, msgs)
+	// Run Tool Calls
+	for _, toolCall := range toolCalls {
+		toolResultContext, err := a.RunTool(ctx, reporter, req.Question, &toolCall)
 		if err != nil {
-			reporter.Send(NewStreamError(err.Error(), "inference_failed"))
-			return nil, err
+			continue
 		}
 
-		// Final Answer Generated
-		if len(toolCalls) == 0 {
-			break
-		}
-
-		// Run Tool Calls
-		for _, toolCall := range toolCalls {
-			toolResultContext, err := a.RunTool(ctx, reporter, req.Question, &toolCall)
-			if err != nil {
-				continue
-			}
-
-			msgs = append(msgs, llm.Message{
-				Role:    "user",
-				Content: toolResultContext,
-			})
-		}
+		msgs = append(msgs, llm.Message{
+			Role:    "user",
+			Content: toolResultContext,
+		})
 	}
 
-	response.Answer = inference
+	// Step 2: Run LLM with the selected tools
+	var inference strings.Builder
+	err := a.config.BigModel.GenerateInference(
+		ctx, msgs,
+		func(chunk string) error {
+			inference.WriteString(chunk)
+			reporter.Send(NewAnswerChunk(&schema.AnswerChunk{Content: chunk}))
+			return nil
+		},
+		llm.WithMaxTokens(a.config.MaxTokens),
+		llm.WithTemperature(0.7),
+	)
+
+	if err != nil {
+		logger.Error("Failed to run inference", zap.Error(err))
+		reporter.Send(NewStreamError(err.Error(), "inference_failed"))
+	}
+
+	response.Answer = inference.String()
 	response.ProcessingTime = getCurrentTimeMs() - startTime
 
 	reporter.Send(NewStreamComplete(response))
 	return response, nil
 }
 
-func (a *Agent) RunLLM(ctx context.Context, msgs []llm.Message, reporter ProgressReporter) (string, []api.ToolCall, error) {
-	var inference strings.Builder
+func (a *Agent) SelectTools(ctx context.Context, reporter ProgressReporter, msgs []llm.Message) []api.ToolCall {
 	var toolCalls []api.ToolCall
-
-	err := a.config.BigModel.GenerateInferenceWithTools(
+	toolSelector := llm.NewOllamaClient("gpt-oss:20b")
+	err := toolSelector.GenerateInferenceWithTools(
 		ctx, msgs,
-		func(chunk string) error {
-			inference.WriteString(chunk)
-			if len(toolCalls) == 0 {
-				reporter.Send(NewAnswerChunk(&schema.AnswerChunk{Content: chunk}))
-			}
-			return nil
-		},
+		func(chunk string) error { return nil }, // ignore Answer
 		func(calls []api.ToolCall) error {
 			toolCalls = append(toolCalls, calls...)
 			return nil
@@ -80,5 +78,10 @@ func (a *Agent) RunLLM(ctx context.Context, msgs []llm.Message, reporter Progres
 		llm.WithMaxTokens(a.config.MaxTokens),
 	)
 
-	return inference.String(), toolCalls, err
+	if err != nil {
+		logger.Error("Failed to select tools", zap.Error(err))
+		reporter.Send(NewStreamError(err.Error(), "tool_selection_failed"))
+	}
+
+	return toolCalls
 }

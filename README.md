@@ -11,6 +11,9 @@ Agent-Boot is designed for building production-ready AI agents with streaming ca
 
 ![Agent Boot Demo](agent_boot_demo.gif)
 
+Above snapshot is a demonstration of the Agent-Boot framework streaming in action. 
+Source: [https://github.com/SaiNageswarS/medicine-rag](https://github.com/SaiNageswarS/medicine-rag)
+
 ## ✨ Features
 
 - 🚀 **Streaming-First Architecture**: Real-time response streaming with Protocol Buffers

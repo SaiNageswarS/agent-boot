@@ -103,13 +103,7 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChu
 	// Join all sentences into a single text
 	combinedText := strings.Join(chunk.Sentences, " ")
 
-	// Create summarization prompt using templates
-	promptData := prompts.SummarizationPromptData{
-		Query:   userQuery,
-		Content: combinedText,
-	}
-
-	systemPrompt, userPrompt, err := prompts.RenderSummarizationPrompt(promptData)
+	systemPrompt, userPrompt, err := prompts.RenderSummarizationPrompt(userQuery, combinedText)
 	if err != nil {
 		// If template rendering fails, keep the original result
 		logger.Error("Failed to render summarization prompt", zap.String("title", chunk.Title), zap.Error(err))
@@ -130,7 +124,6 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChu
 			return nil
 		},
 		llm.WithTemperature(0.3),
-		llm.WithMaxTokens(200),
 	)
 
 	if err != nil {

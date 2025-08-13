@@ -65,6 +65,9 @@ func (a *Agent) RunTool(ctx context.Context, reporter ProgressReporter, query st
 		return "", err
 	}
 
+	reporter.Send(NewProgressUpdate(
+		schema.Stage_tool_execution_completed,
+		fmt.Sprintf("Tool %s completed successfully", selection.Function.Name)))
 	return strings.Join(toolResultChunks, "\n\n"), nil
 }
 
@@ -96,6 +99,7 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChu
 		return nil
 	}
 
+	logger.Info("Summarizing Result", zap.String("title", chunk.Title), zap.Int("sentence_count", len(chunk.Sentences)), zap.String("query", userQuery))
 	// Join all sentences into a single text
 	combinedText := strings.Join(chunk.Sentences, " ")
 
@@ -145,12 +149,13 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChu
 
 	// Create new summarized result
 	summarizedResult := &schema.ToolResultChunk{
-		Sentences:   []string{summary},
-		Attribution: chunk.Attribution, // Preserve attributions
+		Sentences:   strings.Split(summary, "\n"),
+		Attribution: chunk.Attribution,
 		Title:       chunk.Title,
 		Metadata:    make(map[string]string),
 	}
 
+	logger.Info("Summarized tool result", zap.Int("original_sentence_count", len(chunk.Sentences)), zap.Int("summarized_sentence_count", len(summarizedResult.Sentences)))
 	// Copy metadata and add summarization info
 	maps.Copy(summarizedResult.Metadata, chunk.Metadata)
 	summarizedResult.Metadata["summarized"] = "true"

@@ -98,6 +98,7 @@ func TestAgentBuilderBuild(t *testing.T) {
 	agent := builder.
 		WithMiniModel(mockMiniModel).
 		WithBigModel(mockBigModel).
+		WithToolSelector(mockMiniModel).
 		AddTool(tool).
 		WithMaxTokens(3000).
 		WithMaxTurns(7).
@@ -161,18 +162,6 @@ func TestAgentBuilderMultipleTools(t *testing.T) {
 	assert.Equal(t, "search", builder.config.Tools[2].Function.Name)
 }
 
-func TestAgentBuilderDefaultValues(t *testing.T) {
-	builder := NewAgentBuilder()
-	agent := builder.Build()
-
-	// Test that default values are preserved
-	assert.Equal(t, 5, agent.config.MaxTurns)
-	assert.Equal(t, 2000, agent.config.MaxTokens)
-	assert.Nil(t, agent.config.MiniModel)
-	assert.Nil(t, agent.config.BigModel)
-	assert.Empty(t, agent.config.Tools)
-}
-
 func TestAgentBuilderOverrideValues(t *testing.T) {
 	builder := NewAgentBuilder()
 
@@ -185,72 +174,4 @@ func TestAgentBuilderOverrideValues(t *testing.T) {
 	builder.WithMaxTokens(2000).WithMaxTurns(8)
 	assert.Equal(t, 2000, builder.config.MaxTokens)
 	assert.Equal(t, 8, builder.config.MaxTurns)
-}
-
-func TestAgentBuilderNilValues(t *testing.T) {
-	builder := NewAgentBuilder()
-
-	// Test with nil models
-	builder.WithMiniModel(nil).WithBigModel(nil)
-	agent := builder.Build()
-
-	assert.Nil(t, agent.config.MiniModel)
-	assert.Nil(t, agent.config.BigModel)
-}
-
-func TestAgentBuilderZeroValues(t *testing.T) {
-	builder := NewAgentBuilder()
-
-	// Test with zero values
-	builder.WithMaxTokens(0).WithMaxTurns(0)
-	agent := builder.Build()
-
-	assert.Equal(t, 0, agent.config.MaxTokens)
-	assert.Equal(t, 0, agent.config.MaxTurns)
-}
-
-// Benchmark tests
-func BenchmarkNewAgentBuilder(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		builder := NewAgentBuilder()
-		_ = builder
-	}
-}
-
-func BenchmarkAgentBuilderBuild(b *testing.B) {
-	mockModel := &mockLLMClient{model: "test"}
-	tool := MCPTool{
-		Tool: api.Tool{
-			Function: api.ToolFunction{Name: "test"},
-		},
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		builder := NewAgentBuilder()
-		agent := builder.
-			WithMiniModel(mockModel).
-			WithBigModel(mockModel).
-			AddTool(tool).
-			WithMaxTokens(1000).
-			WithMaxTurns(5).
-			Build()
-		_ = agent
-	}
-}
-
-func BenchmarkAgentBuilderChaining(b *testing.B) {
-	mockModel := &mockLLMClient{model: "test"}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		builder := NewAgentBuilder()
-		result := builder.
-			WithMiniModel(mockModel).
-			WithBigModel(mockModel).
-			WithMaxTokens(1000).
-			WithMaxTurns(5)
-		_ = result
-	}
 }

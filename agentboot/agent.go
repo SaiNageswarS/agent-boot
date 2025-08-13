@@ -12,6 +12,7 @@ import (
 type AgentConfig struct {
 	MiniModel    llm.LLMClient
 	BigModel     llm.LLMClient
+	ToolSelector llm.LLMClient
 	SystemPrompt string
 	Tools        []MCPTool
 	MaxTokens    int

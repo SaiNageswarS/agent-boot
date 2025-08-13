@@ -45,6 +45,7 @@ func (m *mockLLMClient) GetModel() string {
 func TestAgentConfig(t *testing.T) {
 	mockMiniModel := &mockLLMClient{model: "mini-model"}
 	mockBigModel := &mockLLMClient{model: "big-model"}
+	mockToolSelector := &mockLLMClient{model: "gpt-oss:20b"}
 
 	tool := MCPTool{
 		SummarizeContext: true,
@@ -56,11 +57,12 @@ func TestAgentConfig(t *testing.T) {
 	}
 
 	config := AgentConfig{
-		MiniModel: mockMiniModel,
-		BigModel:  mockBigModel,
-		Tools:     []MCPTool{tool},
-		MaxTokens: 1000,
-		MaxTurns:  3,
+		MiniModel:    mockMiniModel,
+		BigModel:     mockBigModel,
+		ToolSelector: mockToolSelector,
+		Tools:        []MCPTool{tool},
+		MaxTokens:    1000,
+		MaxTurns:     3,
 	}
 
 	assert.Equal(t, mockMiniModel, config.MiniModel)
@@ -71,18 +73,26 @@ func TestAgentConfig(t *testing.T) {
 }
 
 func TestNewAgent(t *testing.T) {
-	config := AgentConfig{
-		MaxTokens: 2000,
-		MaxTurns:  5,
-	}
+	mockToolSelector := &mockLLMClient{model: "gpt-oss:20b"}
 
 	agent := NewAgentBuilder().
-		WithMaxTokens(config.MaxTokens).
-		WithMaxTurns(config.MaxTurns).
+		WithMaxTokens(2000).
+		WithMaxTurns(5).
+		WithToolSelector(mockToolSelector).
 		Build()
 
+	expectedConfig := AgentConfig{
+		MiniModel:    nil,
+		BigModel:     nil,
+		ToolSelector: mockToolSelector,
+		SystemPrompt: "",
+		Tools:        nil,
+		MaxTokens:    2000,
+		MaxTurns:     5,
+	}
+
 	assert.NotNil(t, agent)
-	assert.Equal(t, config, agent.config)
+	assert.Equal(t, expectedConfig, agent.config)
 	assert.Equal(t, 2000, agent.config.MaxTokens)
 	assert.Equal(t, 5, agent.config.MaxTurns)
 }

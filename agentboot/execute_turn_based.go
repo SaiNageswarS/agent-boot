@@ -66,8 +66,8 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 
 func (a *Agent) SelectTools(ctx context.Context, reporter ProgressReporter, msgs []llm.Message) []api.ToolCall {
 	var toolCalls []api.ToolCall
-	toolSelector := llm.NewOllamaClient("gpt-oss:20b")
-	err := toolSelector.GenerateInferenceWithTools(
+
+	err := a.config.ToolSelector.GenerateInferenceWithTools(
 		ctx, msgs,
 		func(chunk string) error { return nil }, // ignore Answer
 		func(calls []api.ToolCall) error {

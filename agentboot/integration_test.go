@@ -61,6 +61,7 @@ func TestAgentIntegration(t *testing.T) {
 	agent := builder.
 		WithBigModel(mockModel).
 		WithMiniModel(mockModel).
+		WithToolSelector(mockModel). // Add mock tool selector to avoid real Ollama client creation
 		AddTool(tool).
 		WithMaxTokens(1000).
 		WithMaxTurns(2).

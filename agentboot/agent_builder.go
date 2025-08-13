@@ -25,6 +25,11 @@ func (b *AgentBuilder) WithBigModel(client llm.LLMClient) *AgentBuilder {
 	return b
 }
 
+func (b *AgentBuilder) WithToolSelector(client llm.LLMClient) *AgentBuilder {
+	b.config.ToolSelector = client
+	return b
+}
+
 func (b *AgentBuilder) WithSystemPrompt(prompt string) *AgentBuilder {
 	b.config.SystemPrompt = prompt
 	return b
@@ -46,5 +51,9 @@ func (b *AgentBuilder) WithMaxTurns(maxTurns int) *AgentBuilder {
 }
 
 func (b *AgentBuilder) Build() *Agent {
+	if b.config.ToolSelector == nil {
+		b.config.ToolSelector = llm.NewOllamaClient("gpt-oss:20b") // Default tool selector
+	}
+
 	return &Agent{config: b.config}
 }

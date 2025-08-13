@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-go-binaries:
+  build:
     runs-on: ubuntu-latest
 
     steps:

@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
+	"github.com/SaiNageswarS/agent-boot/prompts"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/ollama/ollama/api"
 )
@@ -113,8 +115,204 @@ func (c *AnthropicClient) GenerateInferenceWithTools(
 	toolCallback func(toolCalls []api.ToolCall) error,
 	opts ...LLMOption,
 ) error {
-	// Anthropic doesn't support native tool calling, so we just use regular inference
-	return c.GenerateInference(ctx, messages, contentCallback, opts...)
+	settings := LLMSettings{
+		model:       c.model,
+		temperature: 0.7,
+		maxTokens:   4096,
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(&settings)
+	}
+
+	// If no tools are provided, use regular inference
+	if len(settings.tools) == 0 {
+		return c.GenerateInference(ctx, messages, contentCallback, opts...)
+	}
+
+	// Use unified inference approach
+	return c.unifiedInferenceWithTools(ctx, messages, contentCallback, toolCallback, settings.tools, 1, 3, "")
+}
+
+// unifiedInferenceWithTools handles both tool calling and direct answers in a single unified approach
+func (c *AnthropicClient) unifiedInferenceWithTools(
+	ctx context.Context,
+	messages []Message,
+	contentCallback func(chunk string) error,
+	toolCallback func(toolCalls []api.ToolCall) error,
+	tools []api.Tool,
+	currentTurn int,
+	maxTurns int,
+	previousToolResults string,
+) error {
+	// Create tool descriptions for the prompt
+	toolDescriptions := make([]string, len(tools))
+	for i, tool := range tools {
+		// Format: "tool_name: description (parameters: param1:type, param2:type, ...)"
+		params := []string{}
+		if tool.Function.Parameters.Properties != nil {
+			for paramName, paramProp := range tool.Function.Parameters.Properties {
+				paramType := "string" // default
+				if len(paramProp.Type) > 0 {
+					paramType = string(paramProp.Type[0])
+				}
+
+				// Check if parameter is required
+				isRequired := false
+				for _, req := range tool.Function.Parameters.Required {
+					if req == paramName {
+						isRequired = true
+						break
+					}
+				}
+
+				paramStr := fmt.Sprintf("%s:%s", paramName, paramType)
+				if isRequired {
+					paramStr += " (required)"
+				}
+				params = append(params, paramStr)
+			}
+		}
+
+		var paramStr string
+		if len(params) > 0 {
+			paramStr = fmt.Sprintf(" (parameters: %s)", strings.Join(params, ", "))
+		}
+
+		toolDescriptions[i] = fmt.Sprintf("%s: %s%s",
+			tool.Function.Name,
+			tool.Function.Description,
+			paramStr)
+	}
+
+	// Get the last user message as the query
+	var query string
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			query = messages[i].Content
+			break
+		}
+	}
+
+	// Force direct answer if we've reached max turns
+	forceDirectAnswer := currentTurn >= maxTurns
+
+	// Create unified inference prompt data
+	promptData := prompts.InferenceWithToolPromptData{
+		ToolDescriptions:    toolDescriptions,
+		MaxTools:            len(tools),
+		Query:               query,
+		Context:             "", // Could be enhanced to include conversation context
+		CurrentTurn:         currentTurn,
+		MaxTurns:            maxTurns,
+		PreviousToolResults: previousToolResults,
+	}
+
+	// Render the unified inference prompt
+	systemPrompt, userPrompt, err := prompts.RenderInferenceWithToolPrompt(promptData)
+	if err != nil {
+		return fmt.Errorf("error rendering unified inference prompt: %w", err)
+	}
+
+	// If we need to force a direct answer, modify the system prompt
+	if forceDirectAnswer {
+		systemPrompt += "\n\n**IMPORTANT: You have reached the maximum number of turns. You MUST provide a direct answer now, do not use any more tools.**"
+	}
+
+	// Create messages for unified inference
+	inferenceMessages := []Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userPrompt},
+	}
+
+	// Get unified inference response
+	var inferenceResponse strings.Builder
+	err = c.GenerateInference(ctx, inferenceMessages,
+		func(chunk string) error {
+			inferenceResponse.WriteString(chunk)
+			return nil
+		},
+		WithMaxTokens(4096))
+
+	if err != nil {
+		return fmt.Errorf("error getting unified inference: %w", err)
+	}
+
+	// Parse the unified response
+	return c.parseUnifiedResponse(inferenceResponse.String(), contentCallback, toolCallback, forceDirectAnswer)
+}
+
+// parseUnifiedResponse parses the unified response and calls appropriate callbacks
+func (c *AnthropicClient) parseUnifiedResponse(
+	response string,
+	contentCallback func(chunk string) error,
+	toolCallback func(toolCalls []api.ToolCall) error,
+	forceDirectAnswer bool,
+) error {
+	// Clean the response to extract JSON
+	response = strings.TrimSpace(response)
+
+	// Find JSON content within the response
+	startIdx := strings.Index(response, "{")
+	endIdx := strings.LastIndex(response, "}")
+
+	if startIdx == -1 || endIdx == -1 || startIdx >= endIdx {
+		// If we can't parse JSON and it's forced direct answer, treat as content
+		if forceDirectAnswer {
+			return contentCallback(response)
+		}
+		return fmt.Errorf("no valid JSON found in response")
+	}
+
+	jsonStr := response[startIdx : endIdx+1]
+
+	var unifiedResponse unifiedInferenceResponse
+	if err := json.Unmarshal([]byte(jsonStr), &unifiedResponse); err != nil {
+		// If we can't parse JSON and it's forced direct answer, treat as content
+		if forceDirectAnswer {
+			return contentCallback(response)
+		}
+		return fmt.Errorf("error unmarshaling unified response: %w", err)
+	}
+
+	// Handle the response based on action
+	switch unifiedResponse.Action {
+	case "direct_answer":
+		if unifiedResponse.Content == "" {
+			return fmt.Errorf("direct_answer action but no content provided")
+		}
+		return contentCallback(unifiedResponse.Content)
+
+	case "use_tools":
+		if len(unifiedResponse.ToolCalls) == 0 {
+			// If no tool calls but action is use_tools, fall back to direct answer if forced
+			if forceDirectAnswer {
+				return contentCallback("I apologize, but I couldn't determine the appropriate tools to use for your request.")
+			}
+			return fmt.Errorf("use_tools action but no tool calls provided")
+		}
+
+		// Convert to api.ToolCall format
+		toolCalls := make([]api.ToolCall, len(unifiedResponse.ToolCalls))
+		for i, tc := range unifiedResponse.ToolCalls {
+			toolCalls[i] = api.ToolCall{
+				Function: api.ToolCallFunction{
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Arguments,
+				},
+			}
+		}
+
+		return toolCallback(toolCalls)
+
+	default:
+		// If action is unknown and it's forced direct answer, treat as content
+		if forceDirectAnswer {
+			return contentCallback(response)
+		}
+		return fmt.Errorf("unknown action: %s", unifiedResponse.Action)
+	}
 }
 
 type anthropicRequest struct {
@@ -138,4 +336,17 @@ type anthropicResponse struct {
 type content struct {
 	Text string `json:"text"`
 	Type string `json:"type"`
+}
+
+// unifiedInferenceResponse represents the unified response structure
+type unifiedInferenceResponse struct {
+	Action    string `json:"action"` // "use_tools" or "direct_answer"
+	Content   string `json:"content,omitempty"`
+	ToolCalls []struct {
+		Function struct {
+			Name      string                 `json:"name"`
+			Arguments map[string]interface{} `json:"arguments"`
+		} `json:"function"`
+		Reasoning string `json:"reasoning"`
+	} `json:"tool_calls,omitempty"`
 }

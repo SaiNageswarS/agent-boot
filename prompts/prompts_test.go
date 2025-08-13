@@ -324,7 +324,6 @@ func TestRenderSummarizationPrompt(t *testing.T) {
 		"text summarization expert",
 		"relevant to the user's question",
 		"IRRELEVANT",
-		"1-3 clear, concise sentences",
 		"important facts, numbers, and key details",
 	}
 

@@ -20,9 +20,6 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 	msgs := []llm.Message{
 		{Role: "user", Content: req.Question},
 	}
-	if a.config.SystemPrompt != "" {
-		msgs = append([]llm.Message{{Role: "system", Content: a.config.SystemPrompt}}, msgs...)
-	}
 
 	// Step 1: Select tools using gpt-oss
 	toolCalls := a.SelectTools(ctx, reporter, msgs)
@@ -50,6 +47,7 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 		},
 		llm.WithMaxTokens(a.config.MaxTokens),
 		llm.WithTemperature(0.7),
+		llm.WithSystemPrompt(a.config.SystemPrompt),
 	)
 
 	if err != nil {
@@ -76,6 +74,7 @@ func (a *Agent) SelectTools(ctx context.Context, reporter ProgressReporter, msgs
 		},
 		llm.WithTools(toAPITools(a.config.Tools)),
 		llm.WithMaxTokens(a.config.MaxTokens),
+		llm.WithSystemPrompt(a.config.SystemPrompt),
 	)
 
 	if err != nil {

@@ -111,7 +111,6 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChu
 	}
 
 	messages := []llm.Message{
-		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userPrompt},
 	}
 
@@ -124,6 +123,7 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChu
 			return nil
 		},
 		llm.WithTemperature(0.3),
+		llm.WithSystemPrompt(systemPrompt),
 	)
 
 	if err != nil {

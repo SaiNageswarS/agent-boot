@@ -6,7 +6,9 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/llm"
 	"github.com/SaiNageswarS/agent-boot/schema"
+	"github.com/SaiNageswarS/agent-boot/session"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-collection-boot/async"
 	"github.com/ollama/ollama/api"
 	"go.uber.org/zap"
 )
@@ -17,9 +19,17 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 
 	response := &schema.StreamComplete{ToolsUsed: []string{}, Metadata: map[string]string{}}
 
-	msgs := []llm.Message{
-		{Role: "user", Content: req.Question},
+	msgs := make([]llm.Message, 0, a.config.MaxSessionMsgs+1)
+	if a.config.SessionCollection != nil {
+		session, err := async.Await(a.config.SessionCollection.FindOneByID(ctx, req.SessionId))
+		if err != nil {
+			logger.Error("Failed to find session", zap.Error(err))
+		} else {
+			msgs = append(msgs, session.Messages...)
+		}
 	}
+
+	msgs = append(msgs, llm.Message{Role: "user", Content: req.Question})
 
 	// Step 1: Select tools using gpt-oss
 	toolCalls := a.SelectTools(ctx, reporter, msgs)
@@ -30,8 +40,10 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 			continue
 		}
 
+		// tool results are considered as assistant since,
+		// a user message can confuse model as instruction.
 		msgs = append(msgs, llm.Message{
-			Role:    "user",
+			Role:    "assistant",
 			Content: toolResultContext,
 		})
 	}
@@ -57,6 +69,21 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 
 	response.Answer = inference.String()
 	response.ProcessingTime = getCurrentTimeMs() - startTime
+
+	// save session
+	if a.config.SessionCollection != nil {
+		msgs = append(msgs, llm.Message{Role: "assistant", Content: response.Answer})
+		msgs = trimForSession(msgs, a.config.MaxSessionMsgs)
+
+		session := session.SessionModel{
+			ID:       req.SessionId,
+			Messages: msgs,
+		}
+		_, err := async.Await(a.config.SessionCollection.Save(ctx, session))
+		if err != nil {
+			logger.Error("Failed to save session", zap.Error(err))
+		}
+	}
 
 	reporter.Send(NewStreamComplete(response))
 	return response, nil

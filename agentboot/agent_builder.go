@@ -1,6 +1,10 @@
 package agentboot
 
-import "github.com/SaiNageswarS/agent-boot/llm"
+import (
+	"github.com/SaiNageswarS/agent-boot/llm"
+	"github.com/SaiNageswarS/agent-boot/session"
+	"github.com/SaiNageswarS/go-api-boot/odm"
+)
 
 type AgentBuilder struct {
 	config AgentConfig
@@ -47,6 +51,16 @@ func (b *AgentBuilder) WithMaxTokens(max int) *AgentBuilder {
 
 func (b *AgentBuilder) WithMaxTurns(maxTurns int) *AgentBuilder {
 	b.config.MaxTurns = maxTurns
+	return b
+}
+
+func (b *AgentBuilder) WithMaxSessionMessages(max int) *AgentBuilder {
+	b.config.MaxSessionMsgs = max
+	return b
+}
+
+func (b *AgentBuilder) WithSessionCollection(collection odm.OdmCollectionInterface[session.SessionModel]) *AgentBuilder {
+	b.config.SessionCollection = collection
 	return b
 }
 

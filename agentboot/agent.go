@@ -5,6 +5,8 @@ import (
 
 	"github.com/SaiNageswarS/agent-boot/llm"
 	"github.com/SaiNageswarS/agent-boot/schema"
+	"github.com/SaiNageswarS/agent-boot/session"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/ollama/ollama/api"
 )
 
@@ -17,6 +19,10 @@ type AgentConfig struct {
 	Tools        []MCPTool
 	MaxTokens    int
 	MaxTurns     int
+
+	// Used to add previous messages to agent conversation/context.
+	SessionCollection odm.OdmCollectionInterface[session.SessionModel]
+	MaxSessionMsgs    int
 }
 
 // Agent represents the main agent system

@@ -10,6 +10,7 @@ service Agent {
 
 message GenerateAnswerRequest {
     string question = 1;
+    string sessionId = 2;   // For including previous messages in agent inference.
     int32 maxIterations = 3;
     map<string, string> metadata = 4;
 }

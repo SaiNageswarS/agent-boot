@@ -19,8 +19,7 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 
 	response := &schema.StreamComplete{ToolsUsed: []string{}, Metadata: map[string]string{}}
 
-	// Max 6 messages from
-	msgs := make([]llm.Message, 0, 6)
+	msgs := make([]llm.Message, 0, a.config.MaxSessionMsgs+1)
 	if a.config.SessionCollection != nil {
 		session, err := async.Await(a.config.SessionCollection.FindOneByID(ctx, req.SessionId))
 		if err != nil {

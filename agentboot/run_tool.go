@@ -102,7 +102,12 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChu
 		return nil
 	}
 
-	logger.Info("Summarizing Result", zap.String("title", chunk.Title), zap.Int("sentence_count", len(chunk.Sentences)), zap.String("query", userQuery))
+	logger.Info("Summarizing Result",
+		zap.String("title", chunk.Title),
+		zap.Int("sentence_count", len(chunk.Sentences)),
+		zap.String("query", userQuery),
+		zap.String("tool_inputs", toolInputs))
+
 	// Join all sentences into a single text
 	combinedText := strings.Join(chunk.Sentences, " ")
 

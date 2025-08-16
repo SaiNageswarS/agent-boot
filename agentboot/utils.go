@@ -44,7 +44,7 @@ func trimForSession(msgs []llm.Message, maxUser int) []llm.Message {
 	usersSeen := 0
 	start := 0 // default: keep all if we don't exceed maxUser users
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == "user" {
+		if msgs[i].Role == "user" && !msgs[i].IsToolResult {
 			usersSeen++
 			start = i
 			if usersSeen == maxUser {

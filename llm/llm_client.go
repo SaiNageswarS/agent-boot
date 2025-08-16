@@ -67,6 +67,7 @@ func WithTools(tools []api.Tool) LLMOption {
 }
 
 type Message struct {
-	Role    string `bson:"role" json:"role"`       // "user", "assistant", "system"
-	Content string `bson:"content" json:"content"` // the message content
+	Role         string `bson:"role" json:"role"`        // "user", "assistant", "system"
+	Content      string `bson:"content" json:"content"`  // the message content
+	IsToolResult bool   `bson:"is_tool_result" json:"-"` // true if this message is a result of a tool call
 }

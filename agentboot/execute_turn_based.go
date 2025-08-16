@@ -40,11 +40,10 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 			continue
 		}
 
-		// tool results are considered as assistant since,
-		// a user message can confuse model as instruction.
 		msgs = append(msgs, llm.Message{
-			Role:    "assistant",
-			Content: toolResultContext,
+			Role:         "user",
+			Content:      toolResultContext,
+			IsToolResult: true,
 		})
 	}
 

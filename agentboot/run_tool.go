@@ -27,6 +27,9 @@ func (a *Agent) RunTool(ctx context.Context, reporter ProgressReporter, query st
 	// Execute the tool handler
 	toolResultChan := tool.Handler(ctx, selection.Function.Arguments)
 
+	// Format tool inputs for summarization context
+	toolInputsMD := formatToolInputsToMarkdown(selection.Function.Name, selection.Function.Arguments)
+
 	// Parallel stream processing of tool results
 	linqCtx, cancel := context.WithCancel(ctx)
 	toolResultChunks, err := linq.Pipe4(
@@ -34,7 +37,7 @@ func (a *Agent) RunTool(ctx context.Context, reporter ProgressReporter, query st
 
 		linq.SelectPar(func(raw *schema.ToolResultChunk) *schema.ToolResultChunk {
 			if tool.SummarizeContext {
-				return a.summarizeResult(linqCtx, raw, query)
+				return a.summarizeResult(linqCtx, raw, query, toolInputsMD)
 			}
 
 			// If summarization is not enabled, return the raw result
@@ -83,7 +86,7 @@ func (a *Agent) RunTool(ctx context.Context, reporter ProgressReporter, query st
 // - RAG search results that may contain verbose or tangential information
 // - Web search results with mixed relevant/irrelevant content
 // - Large document chunks that need to be condensed for context windows
-func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChunk, userQuery string) *schema.ToolResultChunk {
+func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChunk, userQuery, toolInputs string) *schema.ToolResultChunk {
 	if chunk == nil {
 		logger.Error("Received nil tool result chunk for summarization")
 		return nil
@@ -103,7 +106,7 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChu
 	// Join all sentences into a single text
 	combinedText := strings.Join(chunk.Sentences, " ")
 
-	systemPrompt, userPrompt, err := prompts.RenderSummarizationPrompt(userQuery, combinedText)
+	systemPrompt, userPrompt, err := prompts.RenderSummarizationPrompt(userQuery, combinedText, toolInputs)
 	if err != nil {
 		// If template rendering fails, keep the original result
 		logger.Error("Failed to render summarization prompt", zap.String("title", chunk.Title), zap.Error(err))
@@ -135,7 +138,7 @@ func (a *Agent) summarizeResult(ctx context.Context, chunk *schema.ToolResultChu
 	summary := strings.TrimSpace(responseContent.String())
 
 	// Drop irrelevant content
-	if strings.ToUpper(summary) == "IRRELEVANT" {
+	if strings.Contains(summary, "# IRRELEVANT") {
 		logger.Info("Dropping irrelevant tool result", zap.String("title", chunk.Title))
 		return nil
 	}
@@ -229,6 +232,49 @@ func formatToolResultToMD(result *schema.ToolResultChunk) string {
 		b.WriteString("_Attribution: ")
 		b.WriteString(mdEscape(att))
 		b.WriteString("_\n")
+	}
+
+	return b.String()
+}
+
+// formatToolInputsToMarkdown formats tool inputs as markdown for use in summarization prompts
+func formatToolInputsToMarkdown(toolName string, params api.ToolCallFunctionArguments) string {
+	if len(params) == 0 {
+		return fmt.Sprintf("Tool: `%s` (no parameters)", mdEscape(toolName))
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Tool: `%s`\n\n", mdEscape(toolName)))
+
+	// Sort parameters for deterministic output
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	b.WriteString("Parameters:\n")
+	for _, k := range keys {
+		value := params[k]
+		var valueStr string
+
+		// Format the value appropriately
+		switch v := value.(type) {
+		case string:
+			valueStr = v
+		case []string:
+			valueStr = strings.Join(v, ", ")
+		case []interface{}:
+			strs := make([]string, len(v))
+			for i, item := range v {
+				strs[i] = fmt.Sprintf("%v", item)
+			}
+			valueStr = strings.Join(strs, ", ")
+		default:
+			valueStr = fmt.Sprintf("%v", v)
+		}
+
+		b.WriteString(fmt.Sprintf("- **%s**: %s\n", mdEscape(k), mdEscape(valueStr)))
 	}
 
 	return b.String()

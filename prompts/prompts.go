@@ -10,7 +10,7 @@ import (
 var templatesFS embed.FS
 
 // RenderSummarizationPrompt renders the summarization prompt using embedded Go templates
-func RenderSummarizationPrompt(query, content string) (systemPrompt, userPrompt string, err error) {
+func RenderSummarizationPrompt(query, content, toolInputs string) (systemPrompt, userPrompt string, err error) {
 	// Load and parse system prompt template from embedded file
 	systemTemplateContent, err := templatesFS.ReadFile("templates/summarize_context_system.md")
 	if err != nil {
@@ -23,11 +23,13 @@ func RenderSummarizationPrompt(query, content string) (systemPrompt, userPrompt 
 	}
 
 	data := struct {
-		Query   string
-		Content string
+		Query      string
+		Content    string
+		ToolInputs string
 	}{
-		Query:   query,
-		Content: content,
+		Query:      query,
+		Content:    content,
+		ToolInputs: toolInputs,
 	}
 
 	var systemBuf bytes.Buffer

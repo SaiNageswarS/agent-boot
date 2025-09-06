@@ -14,44 +14,41 @@ import (
 )
 
 func TestNewGroqClient(t *testing.T) {
-	// Save original env var
-	originalKey := os.Getenv("GROQ_API_KEY")
-	defer os.Setenv("GROQ_API_KEY", originalKey)
-
 	// Test with missing API key
-	os.Unsetenv("GROQ_API_KEY")
-	client := NewGroqClient("llama-3.3-70b-versatile")
-	assert.Nil(t, client)
+	withEnv("GROQ_API_KEY", "", func(logger *MockLogger) {
+		NewGroqClient("llama-3.3-70b-versatile")
+		assert.True(t, logger.isFatalCalled)
+	})
 
 	// Test with API key set
-	os.Setenv("GROQ_API_KEY", "test-key")
-	client = NewGroqClient("llama-3.3-70b-versatile")
-	assert.NotNil(t, client)
-	assert.Equal(t, "llama-3.3-70b-versatile", client.GetModel())
+	withEnv("GROQ_API_KEY", "test-key", func(logger *MockLogger) {
+		client := NewGroqClient("llama-3.3-70b-versatile")
+		assert.NotNil(t, client)
+		assert.Equal(t, "llama-3.3-70b-versatile", client.GetModel())
+	})
 }
 
 func TestGroqClientCapabilities(t *testing.T) {
-	os.Setenv("GROQ_API_KEY", "test-key")
-	defer os.Unsetenv("GROQ_API_KEY")
+	withEnv("GROQ_API_KEY", "test-key", func(logger *MockLogger) {
+		tests := []struct {
+			model        string
+			capabilities Capability
+		}{
+			{"llama-3.3-70b-versatile", NativeToolCalling},
+			{"llama-3.1-8b-instant", NativeToolCalling},
+			{"openai/gpt-oss-20b", NativeToolCalling},
+			{"openai/gpt-oss-120b", NativeToolCalling},
+			{"meta-llama/llama-4-scout-17b-16e-instruct", NativeToolCalling},
+			{"some-unsupported-model", Capability(0)},
+		}
 
-	tests := []struct {
-		model        string
-		capabilities Capability
-	}{
-		{"llama-3.3-70b-versatile", NativeToolCalling},
-		{"llama-3.1-8b-instant", NativeToolCalling},
-		{"openai/gpt-oss-20b", NativeToolCalling},
-		{"openai/gpt-oss-120b", NativeToolCalling},
-		{"meta-llama/llama-4-scout-17b-16e-instruct", NativeToolCalling},
-		{"some-unsupported-model", Capability(0)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.model, func(t *testing.T) {
-			client := NewGroqClient(tt.model)
-			assert.Equal(t, tt.capabilities, client.Capabilities())
-		})
-	}
+		for _, tt := range tests {
+			t.Run(tt.model, func(t *testing.T) {
+				client := NewGroqClient(tt.model)
+				assert.Equal(t, tt.capabilities, client.Capabilities())
+			})
+		}
+	})
 }
 
 func TestGroqClientGenerateInference(t *testing.T) {
@@ -78,24 +75,23 @@ func TestGroqClientGenerateInference(t *testing.T) {
 	}))
 	defer server.Close()
 
-	os.Setenv("GROQ_API_KEY", "test-key")
-	defer os.Unsetenv("GROQ_API_KEY")
+	withEnv("GROQ_API_KEY", "test-key", func(logger *MockLogger) {
+		client := NewGroqClient("llama-3.3-70b-versatile").(*GroqClient)
+		client.url = server.URL + "/openai/v1/chat/completions"
 
-	client := NewGroqClient("llama-3.3-70b-versatile").(*GroqClient)
-	client.url = server.URL + "/openai/v1/chat/completions"
+		messages := []Message{
+			{Role: "user", Content: "Hello"},
+		}
 
-	messages := []Message{
-		{Role: "user", Content: "Hello"},
-	}
+		var result string
+		err := client.GenerateInference(context.Background(), messages, func(chunk string) error {
+			result = chunk
+			return nil
+		})
 
-	var result string
-	err := client.GenerateInference(context.Background(), messages, func(chunk string) error {
-		result = chunk
-		return nil
+		require.NoError(t, err)
+		assert.Equal(t, "Hello, this is a test response", result)
 	})
-
-	require.NoError(t, err)
-	assert.Equal(t, "Hello, this is a test response", result)
 }
 
 func TestGroqClientGenerateInferenceWithTools(t *testing.T) {

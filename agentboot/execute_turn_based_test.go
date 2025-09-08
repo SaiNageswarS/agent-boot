@@ -387,7 +387,7 @@ func TestAgentSelectTools(t *testing.T) {
 	}
 
 	// Execute
-	toolCalls := agent.SelectTools(context.Background(), reporter, messages)
+	toolCalls := agent.SelectTools(context.Background(), reporter, messages, 0)
 
 	// Assert
 	assert.Len(t, toolCalls, 1)
@@ -413,7 +413,7 @@ func TestAgentSelectToolsError(t *testing.T) {
 	}
 
 	// Execute
-	toolCalls := agent.SelectTools(context.Background(), reporter, messages)
+	toolCalls := agent.SelectTools(context.Background(), reporter, messages, 0)
 
 	// Assert
 	assert.Empty(t, toolCalls)

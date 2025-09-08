@@ -178,8 +178,10 @@ func TestAgentExecuteWithTools(t *testing.T) {
 					},
 				},
 			},
+			{}, // No tool calls in turn 1
+			{}, // No tool calls in turn 2
 		},
-		responses: []string{"", "The answer is 4"},
+		responses: []string{"", "", "", "The answer is 4"}, // 4 responses for 4 calls
 	}
 
 	agent := NewAgentBuilder().
@@ -259,7 +261,7 @@ func TestAgentExecuteMaxTurns(t *testing.T) {
 	// Should still complete even if max turns reached
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.Equal(t, 2, mockBigModel.callCount) // Should have called model maxTurns times
+	assert.Equal(t, 3, mockBigModel.callCount) // Should have called model maxTurns times + 1 for final inference
 }
 
 func TestAgentExecuteLLMError(t *testing.T) {

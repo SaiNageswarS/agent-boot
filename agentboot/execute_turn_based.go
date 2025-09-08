@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/SaiNageswarS/agent-boot/llm"
+	"github.com/SaiNageswarS/agent-boot/prompts"
 	"github.com/SaiNageswarS/agent-boot/schema"
 	"github.com/SaiNageswarS/agent-boot/session"
 	"github.com/SaiNageswarS/go-api-boot/logger"
@@ -31,20 +32,22 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 
 	msgs = append(msgs, llm.Message{Role: "user", Content: req.Question})
 
-	// Step 1: Select tools using gpt-oss
-	toolCalls := a.SelectTools(ctx, reporter, msgs)
-	// Run Tool Calls
-	for _, toolCall := range toolCalls {
-		toolResultContext, err := a.RunTool(ctx, reporter, req.Question, &toolCall)
-		if err != nil {
-			continue
-		}
+	for turn := 0; turn < a.config.MaxTurns; turn++ {
+		// Step 1: Select tools using gpt-oss
+		toolCalls := a.SelectTools(ctx, reporter, msgs, turn)
+		// Run Tool Calls
+		for _, toolCall := range toolCalls {
+			toolResultContext, err := a.RunTool(ctx, reporter, req.Question, &toolCall)
+			if err != nil {
+				continue
+			}
 
-		msgs = append(msgs, llm.Message{
-			Role:         "user",
-			Content:      toolResultContext,
-			IsToolResult: true,
-		})
+			msgs = append(msgs, llm.Message{
+				Role:         "user",
+				Content:      toolResultContext,
+				IsToolResult: true,
+			})
+		}
 	}
 
 	// Step 2: Run LLM with the selected tools
@@ -88,10 +91,18 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 	return response, nil
 }
 
-func (a *Agent) SelectTools(ctx context.Context, reporter ProgressReporter, msgs []llm.Message) []api.ToolCall {
+func (a *Agent) SelectTools(ctx context.Context, reporter ProgressReporter, msgs []llm.Message, turn int) []api.ToolCall {
 	var toolCalls []api.ToolCall
 
-	err := a.config.ToolSelector.GenerateInferenceWithTools(
+	// Render tool selection system prompt
+	systemPrompt, err := prompts.RenderToolSelectionPrompt(turn)
+	if err != nil {
+		logger.Error("Failed to render tool selection prompt", zap.Error(err))
+		reporter.Send(NewStreamError(err.Error(), "prompt_rendering_failed"))
+		return toolCalls
+	}
+
+	err = a.config.ToolSelector.GenerateInferenceWithTools(
 		ctx, msgs,
 		func(chunk string) error { return nil }, // ignore Answer
 		func(calls []api.ToolCall) error {
@@ -100,7 +111,7 @@ func (a *Agent) SelectTools(ctx context.Context, reporter ProgressReporter, msgs
 		},
 		llm.WithTools(toAPITools(a.config.Tools)),
 		llm.WithMaxTokens(a.config.MaxTokens),
-		llm.WithSystemPrompt(a.config.SystemPrompt),
+		llm.WithSystemPrompt(systemPrompt),
 	)
 
 	if err != nil {

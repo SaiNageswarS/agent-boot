@@ -55,3 +55,30 @@ func RenderSummarizationPrompt(query, content, toolInputs string) (systemPrompt,
 
 	return systemBuf.String(), userBuf.String(), nil
 }
+
+// RenderToolSelectionPrompt renders the tool selection system prompt using embedded Go templates
+func RenderToolSelectionPrompt(turn int) (systemPrompt string, err error) {
+	// Load and parse system prompt template from embedded file
+	systemTemplateContent, err := templatesFS.ReadFile("templates/tool_selection_system.md")
+	if err != nil {
+		return "", err
+	}
+
+	systemTmpl, err := template.New("tool_selection_system").Parse(string(systemTemplateContent))
+	if err != nil {
+		return "", err
+	}
+
+	data := struct {
+		Turn int
+	}{
+		Turn: turn,
+	}
+
+	var systemBuf bytes.Buffer
+	if err := systemTmpl.Execute(&systemBuf, data); err != nil {
+		return "", err
+	}
+
+	return systemBuf.String(), nil
+}

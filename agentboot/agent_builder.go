@@ -2,7 +2,7 @@ package agentboot
 
 import (
 	"github.com/SaiNageswarS/agent-boot/llm"
-	"github.com/SaiNageswarS/agent-boot/session"
+	"github.com/SaiNageswarS/agent-boot/memory"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 )
 
@@ -54,13 +54,16 @@ func (b *AgentBuilder) WithMaxTurns(maxTurns int) *AgentBuilder {
 	return b
 }
 
-func (b *AgentBuilder) WithMaxSessionMessages(max int) *AgentBuilder {
-	b.config.MaxSessionMsgs = max
+func (b *AgentBuilder) WithConversationManager(collection odm.OdmCollectionInterface[memory.Conversation], maxMsgs int) *AgentBuilder {
+	b.config.ConversationManager = memory.NewConversationManager(collection, maxMsgs)
 	return b
 }
 
-func (b *AgentBuilder) WithSessionCollection(collection odm.OdmCollectionInterface[session.SessionModel]) *AgentBuilder {
-	b.config.SessionCollection = collection
+// Deprecated: Use WithConversationManager instead
+func (b *AgentBuilder) WithMaxSessionMessages(max int) *AgentBuilder {
+	if b.config.ConversationManager != nil {
+		b.config.ConversationManager.SetMaxMessages(max)
+	}
 	return b
 }
 

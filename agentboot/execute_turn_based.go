@@ -5,11 +5,10 @@ import (
 	"strings"
 
 	"github.com/SaiNageswarS/agent-boot/llm"
+	"github.com/SaiNageswarS/agent-boot/memory"
 	"github.com/SaiNageswarS/agent-boot/prompts"
 	"github.com/SaiNageswarS/agent-boot/schema"
-	"github.com/SaiNageswarS/agent-boot/session"
 	"github.com/SaiNageswarS/go-api-boot/logger"
-	"github.com/SaiNageswarS/go-collection-boot/async"
 	"github.com/ollama/ollama/api"
 	"go.uber.org/zap"
 )
@@ -20,21 +19,18 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 
 	response := &schema.StreamComplete{ToolsUsed: []string{}, Metadata: map[string]string{}}
 
-	msgs := make([]llm.Message, 0, a.config.MaxSessionMsgs+1)
-	if a.config.SessionCollection != nil {
-		session, err := async.Await(a.config.SessionCollection.FindOneByID(ctx, req.SessionId))
-		if err != nil {
-			logger.Error("Failed to find session", zap.Error(err))
-		} else {
-			msgs = append(msgs, session.Messages...)
-		}
+	// Load previous conversation messages
+	conversation := &memory.Conversation{}
+	if a.config.ConversationManager != nil {
+		conversation = a.config.ConversationManager.LoadSession(ctx, req.SessionId)
 	}
 
-	msgs = append(msgs, llm.Message{Role: "user", Content: req.Question})
+	// Add user message to conversation
+	conversation.AddUserMessage(req.Question)
 
 	for turn := 0; turn < a.config.MaxTurns; turn++ {
 		// Step 1: Select tools using gpt-oss
-		toolCalls := a.SelectTools(ctx, reporter, msgs, turn)
+		toolCalls := a.SelectTools(ctx, reporter, conversation.Messages, turn)
 		// Run Tool Calls
 		for _, toolCall := range toolCalls {
 			toolResultContext, err := a.RunTool(ctx, reporter, req.Question, &toolCall)
@@ -42,18 +38,15 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 				continue
 			}
 
-			msgs = append(msgs, llm.Message{
-				Role:         "user",
-				Content:      toolResultContext,
-				IsToolResult: true,
-			})
+			// Add tool result to conversation
+			conversation.AddToolResult(toolResultContext)
 		}
 	}
 
 	// Step 2: Run LLM with the selected tools
 	var inference strings.Builder
 	err := a.config.BigModel.GenerateInference(
-		ctx, msgs,
+		ctx, conversation.Messages,
 		func(chunk string) error {
 			inference.WriteString(chunk)
 			reporter.Send(NewAnswerChunk(&schema.AnswerChunk{Content: chunk}))
@@ -72,19 +65,10 @@ func (a *Agent) Execute(ctx context.Context, reporter ProgressReporter, req *sch
 	response.Answer = inference.String()
 	response.ProcessingTime = getCurrentTimeMs() - startTime
 
-	// save session
-	if a.config.SessionCollection != nil {
-		msgs = append(msgs, llm.Message{Role: "assistant", Content: response.Answer})
-		msgs = trimForSession(msgs, a.config.MaxSessionMsgs)
-
-		session := session.SessionModel{
-			ID:       req.SessionId,
-			Messages: msgs,
-		}
-		_, err := async.Await(a.config.SessionCollection.Save(ctx, session))
-		if err != nil {
-			logger.Error("Failed to save session", zap.Error(err))
-		}
+	conversation.AddAssistantMessage(response.Answer)
+	// Save session with assistant response
+	if a.config.ConversationManager != nil {
+		a.config.ConversationManager.SaveSession(ctx, conversation)
 	}
 
 	reporter.Send(NewStreamComplete(response))

@@ -4,9 +4,8 @@ import (
 	"context"
 
 	"github.com/SaiNageswarS/agent-boot/llm"
+	"github.com/SaiNageswarS/agent-boot/memory"
 	"github.com/SaiNageswarS/agent-boot/schema"
-	"github.com/SaiNageswarS/agent-boot/session"
-	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/ollama/ollama/api"
 )
 
@@ -20,9 +19,8 @@ type AgentConfig struct {
 	MaxTokens    int
 	MaxTurns     int
 
-	// Used to add previous messages to agent conversation/context.
-	SessionCollection odm.OdmCollectionInterface[session.SessionModel]
-	MaxSessionMsgs    int
+	// Conversation management
+	ConversationManager *memory.ConversationManager
 }
 
 // Agent represents the main agent system

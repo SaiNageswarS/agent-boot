@@ -21,6 +21,38 @@ type ToolResultRenderer struct {
 	toolName           string
 }
 
+// ToolResultRendererOption is a functional option for configuring ToolResultRenderer
+type ToolResultRendererOption func(*ToolResultRenderer)
+
+// NewToolResultRenderer creates a new ToolResultRenderer with the given options.
+// By default, it uses NoOpProgressReporter if no reporter is provided.
+func NewToolResultRenderer(opts ...ToolResultRendererOption) *ToolResultRenderer {
+	r := &ToolResultRenderer{
+		reporter: &NoOpProgressReporter{},
+	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+// WithReporter sets the progress reporter and tool name.
+// toolName is required when using a reporter for proper progress reporting.
+func WithReporter(reporter ProgressReporter, toolName string) ToolResultRendererOption {
+	return func(r *ToolResultRenderer) {
+		r.reporter = reporter
+		r.toolName = toolName
+	}
+}
+
+// WithSummarizationModel sets the LLM client for summarizing tool results.
+// This is required when calling Render with summarizeResult=true.
+func WithSummarizationModel(model llm.LLMClient) ToolResultRendererOption {
+	return func(r *ToolResultRenderer) {
+		r.summarizationModel = model
+	}
+}
+
 func (r *ToolResultRenderer) Render(ctx context.Context, query, toolInputsMD string, toolResultChan <-chan *schema.ToolResultChunk, summarizeResult bool) ([]string, error) {
 	// Parallel stream processing of tool results
 	linqCtx, cancel := context.WithCancel(ctx)

@@ -194,26 +194,26 @@ func formatToolResultToMD(result *schema.ToolResultChunk) string {
 	}
 	if title != "" {
 		b.WriteString("### ")
-		b.WriteString(mdEscape(title))
+		b.WriteString(title)
 		b.WriteString("\n\n")
 	}
 	// Show "via <tool>" only if it's different from the title we used.
 	if tool != "" && tool != title {
 		b.WriteString("_via `")
-		b.WriteString(mdEscape(tool))
+		b.WriteString(tool)
 		b.WriteString("`_\n\n")
 	}
 
 	if errText := strings.TrimSpace(result.Error); errText != "" {
 		b.WriteString("> **Error:** ")
-		b.WriteString(mdEscape(errText))
+		b.WriteString(errText)
 		b.WriteString("\n\n")
 	}
 
 	// Sentences
 	if n := len(result.Sentences); n > 0 {
 		if n == 1 {
-			b.WriteString(mdEscape(strings.TrimSpace(result.Sentences[0])))
+			b.WriteString(strings.TrimSpace(result.Sentences[0]))
 			b.WriteString("\n\n")
 		} else {
 			for _, s := range result.Sentences {
@@ -222,7 +222,7 @@ func formatToolResultToMD(result *schema.ToolResultChunk) string {
 					continue
 				}
 				b.WriteString("- ")
-				b.WriteString(mdEscape(s))
+				b.WriteString(s)
 				b.WriteByte('\n')
 			}
 			b.WriteByte('\n')
@@ -240,18 +240,17 @@ func formatToolResultToMD(result *schema.ToolResultChunk) string {
 		b.WriteString("| Key | Value |\n|---|---|\n")
 		for _, k := range keys {
 			b.WriteString("| ")
-			b.WriteString(mdEscape(k))
+			b.WriteString(k)
 			b.WriteString(" | ")
-			b.WriteString(mdEscape(result.Metadata[k]))
+			b.WriteString(result.Metadata[k])
 			b.WriteString(" |\n")
 		}
 		b.WriteByte('\n')
 	}
 
 	if att := strings.TrimSpace(result.Attribution); att != "" {
-		b.WriteString("_Attribution: ")
-		b.WriteString(mdEscape(att))
-		b.WriteString("_\n")
+		b.WriteString("**Attribution**: ")
+		b.WriteString(att)
 	}
 
 	return b.String()
